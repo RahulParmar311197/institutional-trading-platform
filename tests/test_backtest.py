@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from trading_platform.backtest import EventDrivenBacktester, ExecutionAssumptions
-from trading_platform.config import Settings
 from trading_platform.decision import DecisionAction
+from trading_platform.pipeline import ReplayStrategyPipeline
 from trading_platform.recorded_events import RecordedEventType, RecordedMarketEvent
 from trading_platform.risk import RiskEngine, RiskLimits
 from trading_platform.strategy import EmaCrossoverStrategy
@@ -77,15 +77,22 @@ def test_event_driven_backtest_is_repeatable_and_applies_fees() -> None:
 
 def test_backtest_slippage_moves_fill_against_trade_direction() -> None:
     assumptions = ExecutionAssumptions(slippage_bps=Decimal("10"))
+    pipeline = ReplayStrategyPipeline(
+        instrument_id=INSTRUMENT_ID,
+        interval=timedelta(minutes=1),
+        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
+    )
+    steps = pipeline.run(
+        [
+            event("1", 0, "100"),
+            event("2", 1, "99"),
+            event("3", 2, "101"),
+            event("4", 3, "101"),
+        ]
+    )
     long_decision = next(
         step.decision
-        for step in __import__("trading_platform.pipeline", fromlist=["ReplayStrategyPipeline"])
-        .ReplayStrategyPipeline(
-            instrument_id=INSTRUMENT_ID,
-            interval=timedelta(minutes=1),
-            strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
-        )
-        .run([event("1", 0, "100"), event("2", 1, "99"), event("3", 2, "101"), event("4", 3, "101")])
+        for step in steps
         if step.decision is not None and step.decision.directional
     )
 
