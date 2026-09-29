@@ -1,54 +1,58 @@
 # Current Phase
 
-## Phase 1 — Foundation
+## Phase 1 stabilization + first paper-trading vertical slice
 
 Status: `IN_PROGRESS`
 
-### Objective
+### Current objective
 
-Create the smallest runnable, testable and secure platform foundation on which trading-critical vertical slices can be built.
+Get the existing foundation green in CI, then complete the smallest deterministic end-to-end paper path before adding broader strategy/SMC/options/ML scope.
 
-### Scope
+### Implemented but still under validation
 
-- Python 3.12+ project configuration
+- Python 3.12 project/tooling
 - FastAPI application
-- typed environment/configuration model
-- domain package boundaries
-- PostgreSQL + SQLAlchemy 2
-- Alembic migrations
-- Redis connectivity abstraction
-- structured application logging
-- health/liveness/readiness endpoints
-- audit-event foundation
-- Dockerfile + Docker Compose
-- Ruff, MyPy, Pytest and Bandit configuration
+- fail-safe typed settings (`live_trading_enabled=false` by default)
+- PostgreSQL async boundary + Alembic
+- Redis readiness boundary
+- liveness/readiness endpoints
+- audit-event persistence foundation
+- Docker/Compose
 - GitHub Actions CI
-- `.env.example` without secrets
-- initial architecture/testing/security documentation
+- canonical instrument master/provider identifiers
+- quote-quality validation
+- deterministic candle builder
+- SMA/EMA/RSI
+- strategy signal contract and EMA crossover baseline
+- independent pre-trade notional risk checks
+- OMS state machine with fill idempotency
+- deterministic paper market execution and position tracking
 
-### Explicitly out of scope
+### Immediate engineering gate
 
-- real order placement
-- live-trading enablement
-- strategy profitability claims
-- ML order decisions
-- fake broker integrations
+CI must pass:
 
-### Exit gate
+- Ruff
+- MyPy
+- Pytest
+- Bandit
+- Docker build
 
-Phase 1 is not complete until:
+No component moves to `TESTED` until the relevant checks actually pass.
 
-- application imports/starts successfully
-- formatting/lint passes
-- static type checks pass at configured scope
-- unit tests pass
-- integration tests for critical foundation boundaries pass
-- migrations can be applied from a clean database
-- Docker images build
-- health/readiness behavior is tested
-- secret/security scans have no unresolved critical findings
-- `docs/IMPLEMENTATION_STATUS.md` reflects evidence
+### Next vertical-slice work
 
-### Next
+Decision contract → persistent OMS/order/fill schema → paper P&L → reconciliation → journal/audit → end-to-end paper workflow test.
 
-Proceed to Phase 2: canonical instrument master, historical/live market-data boundaries and data-quality pipeline.
+### Explicitly out of scope for this phase
+
+- unrestricted live order placement
+- broker credentials in source control
+- ML-controlled execution
+- profitability claims
+- broad strategy catalog
+- Kubernetes/microservice expansion
+
+### Safety invariant
+
+Live trading remains disabled and cannot be treated as complete or production-ready until all live gates, reconciliation and explicit operator approval exist.
