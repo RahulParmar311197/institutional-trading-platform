@@ -4,7 +4,7 @@ import pytest
 
 from trading_platform.config import Settings
 from trading_platform.control_repository import RiskControlRepository
-from trading_platform.controls import KillSwitchScope, OperationalMode
+from trading_platform.controls import KillSwitchScope, OperationalMode, RiskLock
 from trading_platform.infrastructure import Infrastructure
 
 pytestmark = pytest.mark.asyncio
@@ -18,10 +18,7 @@ async def test_risk_controls_persist_and_recover() -> None:
     try:
         async with infrastructure.sessions() as session:
             repository = RiskControlRepository(session)
-            global_lock = repository
             await repository.persist_mode(OperationalMode.CLOSE_ONLY)
-            from trading_platform.controls import RiskLock
-
             await repository.persist_lock(
                 RiskLock(
                     scope=KillSwitchScope.GLOBAL,
