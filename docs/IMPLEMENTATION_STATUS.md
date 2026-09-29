@@ -7,11 +7,11 @@ This file is the source of truth for implementation status. Generated files alon
 ## Status definitions
 
 - `NOT_STARTED` — no implementation exists.
-- `IN_PROGRESS` — actively being implemented.
+- `IN_PROGRESS` — actively being implemented or changed after the latest validating run.
 - `IMPLEMENTED_UNVERIFIED` — implementation exists but required validation is incomplete.
-- `TESTED` — required automated/local validation has passed with evidence.
+- `TESTED` — required automated validation has passed with evidence for the stated scope.
 - `BLOCKED` — cannot progress until a named dependency is resolved.
-- `PRODUCTION_VALIDATED` — validated in the intended production-like operational context; unit tests alone cannot establish this.
+- `PRODUCTION_VALIDATED` — validated in the intended production-like operational context; unit/CI tests alone cannot establish this.
 
 ## Repository control
 
@@ -27,68 +27,86 @@ This file is the source of truth for implementation status. Generated files alon
 
 | Capability | Status | Evidence / notes |
 |---|---|---|
-| Python/FastAPI foundation | IMPLEMENTED_UNVERIFIED | `src/trading_platform/app.py` |
-| Typed configuration | IMPLEMENTED_UNVERIFIED | Fail-safe live setting in `config.py` |
-| PostgreSQL/SQLAlchemy/Alembic | IMPLEMENTED_UNVERIFIED | async engine + migrations 0001/0002 |
-| Redis | IMPLEMENTED_UNVERIFIED | readiness/connectivity boundary |
-| Structured logging/tracing | NOT_STARTED | structlog dependency present, integration pending |
-| Health/readiness | IMPLEMENTED_UNVERIFIED | liveness/readiness endpoints and tests |
-| Docker/Compose | IMPLEMENTED_UNVERIFIED | API/PostgreSQL/Redis stack defined |
-| CI | IN_PROGRESS | GitHub Actions active; lint failures being fixed |
-| Instrument master | IMPLEMENTED_UNVERIFIED | canonical instrument/provider ID schema + migration |
+| Python/FastAPI foundation | TESTED | CI passed Ruff, strict MyPy, Pytest, Bandit and Docker build on `main` |
+| Typed configuration | TESTED | Live trading defaults off; enabling outside LIVE is rejected by tests |
+| PostgreSQL/SQLAlchemy/Alembic | IN_PROGRESS | migrations 0001-0003 passed PostgreSQL upgrade/downgrade/upgrade; async session factory + migration 0004 pending latest CI |
+| Redis | IMPLEMENTED_UNVERIFIED | real CI Redis service exists; connectivity boundary implemented |
+| Structured logging/request correlation | TESTED | request ID generation/preservation tested; strict typing and security checks passed |
+| Health/readiness | TESTED | liveness and fail-closed readiness tests passed |
+| Docker/Compose | TESTED | Docker image build passed in CI; Compose is not a production deployment |
+| CI | IN_PROGRESS | prior workflow fully green; current workflow adds migrated PostgreSQL integration tests and is pending validation |
+| Instrument master | TESTED | canonical instrument/provider schema + PostgreSQL migration round-trip passed |
 | Historical market data | NOT_STARTED | provider ingestion pending |
 | Live market data | NOT_STARTED | provider WebSocket ingestion pending |
-| Data quality | IMPLEMENTED_UNVERIFIED | quote validation: stale/crossed/future/invalid prices |
-| Multi-timeframe candles | IN_PROGRESS | deterministic single-interval builder implemented |
-| Indicators | IMPLEMENTED_UNVERIFIED | SMA/EMA/RSI core implemented |
-| Price action | NOT_STARTED | Phase 3 |
-| SMC/ICT | NOT_STARTED | Phase 3 |
-| Regime engine | NOT_STARTED | Phase 3 |
-| Strategy framework | IN_PROGRESS | signal contract + EMA crossover baseline |
-| Decision engine | NOT_STARTED | Phase 4 |
-| Scanner | NOT_STARTED | Phase 4 |
-| Event-driven backtester | NOT_STARTED | Phase 5 |
-| Walk-forward/OOS/Monte Carlo | NOT_STARTED | Phase 5 |
-| OMS | IMPLEMENTED_UNVERIFIED | deterministic in-memory state machine + fill idempotency |
-| Paper broker | IMPLEMENTED_UNVERIFIED | deterministic market fill + position tracking |
-| Portfolio/P&L | IN_PROGRESS | position tracking exists; realized/unrealized P&L pending |
-| Replay | NOT_STARTED | Phase 6 |
-| Journal | NOT_STARTED | Phase 6 |
-| Independent risk engine | IMPLEMENTED_UNVERIFIED | max order/position notional gates |
-| Kill switches | NOT_STARTED | Phase 7 |
-| Upstox adapter | NOT_STARTED | Phase 8 |
-| Dhan adapter | NOT_STARTED | Phase 8 |
-| Execution/reconciliation | NOT_STARTED | Phase 8 |
-| Options engine | NOT_STARTED | Phase 9 |
-| ML subsystem | NOT_STARTED | Phase 10 |
-| Next.js frontend | NOT_STARTED | Phase 11 |
-| E2E/failure/security validation | IN_PROGRESS | unit/invariant tests exist; full E2E pending |
-| Controlled live release | NOT_STARTED | Phase 13; live remains disabled |
+| Data quality | TESTED | stale/crossed/future/non-positive quote checks covered by tests |
+| Multi-timeframe candles | IN_PROGRESS | deterministic single-interval builder tested; exchange-session/multi-timeframe aggregation pending |
+| Indicators | TESTED | SMA/EMA/RSI core calculations and validation tests passed |
+| Price action | NOT_STARTED | planned after paper vertical slice |
+| SMC/ICT | NOT_STARTED | planned after paper vertical slice |
+| Regime engine | NOT_STARTED | planned after feature primitives |
+| Strategy framework | IN_PROGRESS | signal contract + EMA crossover baseline tested; broader lifecycle/versioning pending |
+| Decision engine | IN_PROGRESS | explicit decision contract exists; risk-gating refactor pending latest CI |
+| Scanner | NOT_STARTED | later phase |
+| Event-driven backtester | NOT_STARTED | later phase |
+| Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase |
+| OMS | TESTED | state transitions, fill cap and duplicate-fill idempotency tests passed |
+| Durable order/fill persistence | IN_PROGRESS | ORM schema exists; repository + decision linkage + PostgreSQL integration test pending latest CI |
+| Paper broker | TESTED | deterministic market fill, position updates and duplicate-fill behavior passed |
+| Portfolio/P&L | TESTED | realized/unrealized P&L, partial close and reversal tests passed for current paper model |
+| Replay | NOT_STARTED | later phase |
+| Journal | IMPLEMENTED_UNVERIFIED | append-only paper execution journal implemented; persistence pending |
+| Independent risk engine | IN_PROGRESS | notional gates tested previously; now requires `TradingDecision` and awaits latest CI |
+| Reconciliation | TESTED | position quantity/average-price match/mismatch behavior covered by tests |
+| Kill switches | NOT_STARTED | required before any live path |
+| Upstox adapter | NOT_STARTED | no fake integration; later safe/shadow phase |
+| Dhan adapter | NOT_STARTED | no fake integration; later safe/shadow phase |
+| Real execution/reconciliation | NOT_STARTED | paper path only |
+| Options engine | NOT_STARTED | later phase |
+| ML subsystem | NOT_STARTED | later phase |
+| Next.js frontend | NOT_STARTED | later phase |
+| Paper E2E workflow | IMPLEMENTED_UNVERIFIED | decision → risk → OMS → paper fill → position → reconciliation + rejection-path tests added; latest CI pending |
+| Failure/security validation | IN_PROGRESS | Bandit green on validated head; restart/recovery/failure injection still pending |
+| Controlled live release | NOT_STARTED | live remains disabled and is not approved |
 
-## Current validation evidence
+## Validation evidence
 
-GitHub Actions is now executing on `main`. Dependency installation succeeds. Earlier CI runs failed in Ruff on formatting/line-length issues in newly added files; those reported issues were corrected on `main`. The latest validation run is still pending, so no capability affected by the current codebase is marked `TESTED` yet.
+A green `main` CI run completed for commit `0cd03d157e4a18e34b55db1cfc50a4dde555b77b` with all of the following passing in one run:
 
-Tests currently cover:
+- dependency installation
+- Ruff
+- strict MyPy
+- Pytest
+- Bandit with no identified issues
+- PostgreSQL Alembic upgrade → downgrade-to-base → upgrade
+- Docker image build
 
-- live trading disabled by default and rejected outside LIVE environment
-- liveness/readiness fail-closed behavior
+That run validated the foundation plus the already-present instrument/data-quality/candle/indicator/OMS/paper-P&L/reconciliation code. Changes after that commit are intentionally kept `IN_PROGRESS` or `IMPLEMENTED_UNVERIFIED` until a newer CI run passes.
+
+## Current tests cover
+
+- fail-safe live-trading configuration
+- liveness/readiness and request correlation
 - stale/crossed quote rejection
-- candle close/no-future-trade behavior and out-of-order rejection
-- basic indicator calculations
+- candle close/no-future-trade and out-of-order rejection
+- SMA/EMA/RSI basics
 - strategy closed-candle/history requirements
-- pre-trade notional risk rejection
-- inability to create order intent without risk approval
-- OMS fill quantity invariant
-- duplicate fill idempotency through paper position updates
+- decision behavior
+- pre-trade notional gates
+- inability to create an order intent without approval
+- OMS fill quantity invariant and duplicate-fill idempotency
+- paper realized/unrealized P&L and position reversal
+- position reconciliation
+- newly added full paper trade and rejection paths (pending newest CI)
+- newly added PostgreSQL order/fill repository integration and fill deduplication (pending newest CI)
 
 ## Highest-priority work
 
-1. Get CI green across Ruff, MyPy, Pytest, Bandit and container build.
-2. Add migration/database integration validation and structured logging.
-3. Complete the first paper-trading vertical slice: decision → risk → OMS persistence → paper execution → position/P&L → reconciliation → journal.
-4. Add deterministic price-action/SMC only after the above foundation is stable.
+1. Get the newest CI green with migration 0004 and PostgreSQL repository integration test.
+2. Wire durable order/fill persistence into the paper execution coordinator transactionally.
+3. Persist journal/audit events and add restart recovery/reconciliation tests.
+4. Finish exchange-aware multi-timeframe candle aggregation.
+5. Only then expand price-action/SMC features.
 
 ## Blockers
 
-No product blocker. CI validation is the immediate engineering gate.
+No product blocker. New persistence/E2E changes are waiting for CI evidence; live trading remains deliberately unavailable.
