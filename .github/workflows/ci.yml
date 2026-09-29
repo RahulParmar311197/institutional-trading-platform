@@ -11,6 +11,34 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: itp
+          POSTGRES_USER: itp
+          POSTGRES_PASSWORD: itp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U itp -d itp"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+    env:
+      ITP_ENVIRONMENT: test
+      ITP_LIVE_TRADING_ENABLED: "false"
+      ITP_DATABASE_URL: postgresql+asyncpg://itp:itp@localhost:5432/itp
+      ITP_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,5 +55,10 @@ jobs:
         run: pytest -q
       - name: Bandit
         run: bandit -r src
+      - name: Migration round trip
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
       - name: Build container
         run: docker build -t institutional-trading-platform:test .
