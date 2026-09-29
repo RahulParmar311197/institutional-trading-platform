@@ -39,6 +39,7 @@ jobs:
       ITP_LIVE_TRADING_ENABLED: "false"
       ITP_DATABASE_URL: postgresql+asyncpg://itp:itp@localhost:5432/itp
       ITP_REDIS_URL: redis://localhost:6379/0
+      ITP_RUN_INTEGRATION_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,13 +52,14 @@ jobs:
         run: ruff check .
       - name: MyPy
         run: mypy
+      - name: Apply migrations
+        run: alembic upgrade head
       - name: Tests
         run: pytest -q
       - name: Bandit
         run: bandit -r src
-      - name: Migration round trip
+      - name: Migration rollback and reapply
         run: |
-          alembic upgrade head
           alembic downgrade base
           alembic upgrade head
       - name: Build container
