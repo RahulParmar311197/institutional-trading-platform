@@ -61,8 +61,13 @@ class OrderManagementSystem:
 
     def create(self, intent: ApprovedOrderIntent) -> ManagedOrder:
         order = ManagedOrder(id=uuid.uuid4(), intent=intent)
-        self._orders[order.id] = order
+        self.register(order)
         return order
+
+    def register(self, order: ManagedOrder) -> None:
+        if order.id in self._orders:
+            raise ValueError(f"order {order.id} is already registered")
+        self._orders[order.id] = order
 
     def get(self, order_id: uuid.UUID) -> ManagedOrder:
         try:
