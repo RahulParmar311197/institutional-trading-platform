@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -16,7 +17,8 @@ class Position:
         signed_quantity = quantity if direction is SignalDirection.LONG else -quantity
         new_quantity = self.quantity + signed_quantity
 
-        if self.quantity == 0 or (self.quantity > 0) == (signed_quantity > 0):
+        same_direction = self.quantity == 0 or (self.quantity > 0) == (signed_quantity > 0)
+        if same_direction:
             total_cost = (self.average_price * Decimal(abs(self.quantity))) + (
                 price * Decimal(quantity)
             )
@@ -39,7 +41,7 @@ class Position:
 
 class PaperBroker:
     def __init__(self) -> None:
-        self.positions: dict[object, Position] = {}
+        self.positions: dict[uuid.UUID, Position] = {}
 
     def execute_market(self, order: ManagedOrder, *, fill_id: str, price: Decimal) -> None:
         if price <= 0:
