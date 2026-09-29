@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -37,7 +38,7 @@ class TradingRepository:
     async def persist_fill(
         self,
         *,
-        order_id: object,
+        order_id: uuid.UUID,
         external_fill_id: str,
         source: str,
         quantity: int,
