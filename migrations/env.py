@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from trading_platform import instruments, trading_models  # noqa: F401
+from trading_platform import control_models, instruments, trading_models  # noqa: F401
 from trading_platform.config import get_settings
 from trading_platform.models import Base
 
