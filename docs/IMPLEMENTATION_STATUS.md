@@ -30,13 +30,14 @@ This file is the source of truth for implementation status. Generated files alon
 | Python/FastAPI foundation | TESTED | Ruff, strict MyPy, Pytest, Bandit and Docker all pass on `main` |
 | Typed configuration | TESTED | Live trading defaults off; enabling outside LIVE is rejected by tests |
 | PostgreSQL/SQLAlchemy/Alembic | TESTED | migrations 0001-0004 pass apply → downgrade-to-base → reapply against PostgreSQL |
-| Redis | IMPLEMENTED_UNVERIFIED | connectivity/readiness boundary exists; dedicated real-Redis integration assertion still pending |
+| Redis | TESTED | real Redis readiness integration test passes in CI |
 | Structured logging/request correlation | TESTED | request ID generation/preservation covered by tests |
 | Health/readiness | TESTED | liveness and fail-closed readiness behavior covered by tests |
 | Docker/Compose | TESTED | Docker image builds in CI; Compose remains development infrastructure, not a deployment claim |
-| CI | TESTED | current `main` run 36555910419 completed successfully |
+| CI | TESTED | `main` run 36556333236 completed successfully |
 | Instrument master | TESTED | canonical instrument/provider schema + migration validation |
-| Historical market data | NOT_STARTED | provider ingestion pending |
+| Recorded market events | TESTED | provider-neutral recorded trade envelope with source/timestamp/sequence validation and duplicate conflict checks |
+| Historical market data | IN_PROGRESS | local recorded-event path exists; external/provider ingestion remains pending |
 | Live market data | NOT_STARTED | provider WebSocket ingestion pending |
 | Data quality | TESTED | stale/crossed/future/non-positive quote validation covered |
 | Session model | TESTED | configurable timezone/open/close session model and session-aligned buckets covered |
@@ -48,14 +49,14 @@ This file is the source of truth for implementation status. Generated files alon
 | Strategy framework | IN_PROGRESS | signal contract + EMA crossover baseline tested; registry/lifecycle/versioning pending |
 | Decision engine | TESTED | explicit TradingDecision contract and fail-closed invalid-price/no-direction behavior covered |
 | Scanner | NOT_STARTED | later phase |
-| Event-driven backtester | NOT_STARTED | later phase |
+| Replay | TESTED | normalized deterministic recorded-event stream supports reset/step and repeatable event-to-candle output |
+| Event-driven backtester | NOT_STARTED | later phase, intended to build on replay |
 | Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state covered |
 | Durable order/fill persistence | TESTED | PostgreSQL order/fill persistence, decision linkage, deduplication and recovery tests pass |
 | Paper broker | TESTED | deterministic market fill and position updates covered |
 | Durable paper execution | TESTED | DB transaction commits order/fill/audit before in-memory publish; duplicate-fill rollback covered |
 | Portfolio/P&L | TESTED | realized/unrealized P&L, partial close, reversal and position rebuild from durable fills covered |
-| Replay | NOT_STARTED | later phase |
 | Journal/audit | TESTED | append-only journal behavior plus idempotent PostgreSQL AuditEvent persistence covered |
 | Independent risk engine | TESTED | TradingDecision-only path plus order/position notional gates covered |
 | Reconciliation | TESTED | position quantity/average-price match/mismatch behavior covered |
@@ -73,7 +74,7 @@ This file is the source of truth for implementation status. Generated files alon
 
 ## Validation evidence
 
-A green `main` CI run completed for commit `c78cf9c7ed34297249107edf73bedfe300226f0f` in GitHub Actions run `36555910419`.
+A green `main` CI run completed for commit `a1eaa1c60efc243011b5b6f4038ecc5ffa49c085` in GitHub Actions run `36556333236`.
 
 The run passed all of the following in one workflow:
 
@@ -81,17 +82,18 @@ The run passed all of the following in one workflow:
 - Ruff
 - strict MyPy
 - PostgreSQL migration apply
-- full Pytest suite including PostgreSQL integration tests
+- full Pytest suite including PostgreSQL and Redis integration tests
 - Bandit with no blocking findings
 - Alembic downgrade-to-base and reapply-to-head
 - Docker image build
 
-The validated scope includes foundation/config/health/logging, instrument master, market-data quality, session-aware multi-timeframe candles, SMA/EMA/RSI/ATR/VWAP, confirmed swing/structure-break primitives, deterministic FVG, decision/risk, OMS, paper P&L, durable order/fill/audit persistence, transactional durable paper execution, reconciliation and restart recovery.
+The validated scope includes foundation/config/health/logging, Redis/PostgreSQL infrastructure, instrument master, recorded-event normalization/replay, market-data quality, session-aware multi-timeframe candles, SMA/EMA/RSI/ATR/VWAP, confirmed swing/structure-break primitives, deterministic FVG, decision/risk, OMS, paper P&L, durable order/fill/audit persistence, transactional durable paper execution, reconciliation and restart recovery.
 
 ## Current tests cover
 
 - fail-safe live-trading configuration
 - liveness/readiness and request correlation
+- real Redis readiness
 - stale/crossed/future/non-positive quote rejection
 - base candle close/no-future-trade and out-of-order rejection
 - configured-session containment and session-anchored multi-timeframe buckets
@@ -110,15 +112,17 @@ The validated scope includes foundation/config/health/logging, instrument master
 - OMS/fill/position restart recovery from PostgreSQL
 - position reconciliation
 - paper E2E approval and rejection paths
+- recorded event ordering/deduplication/conflict rejection/timezone validation
+- replay reset/step determinism and repeated replay-to-candle equality
 
 ## Highest-priority work
 
-1. Add a real Redis connectivity integration test and keep infrastructure health evidence complete.
-2. Extend deterministic structure into CHoCH/MSS semantics only after defining trend-state rules explicitly.
+1. Connect replay into a reusable event-processing pipeline that can drive candles/features/strategy deterministically.
+2. Extend deterministic structure into trend state and CHoCH/MSS semantics only after explicit transition rules are encoded and tested.
 3. Add FVG lifecycle state (open/partially mitigated/filled/invalidated) without future-data leakage.
 4. Add regime primitives after market-structure definitions stabilize.
-5. Start recorded/historical market-data ingestion and event-driven replay before any real broker execution.
-6. Add global/account/strategy kill-switch primitives before broker adapters.
+5. Add global/account/strategy kill-switch primitives before broker adapters.
+6. Begin external historical/provider ingestion only through provider-neutral adapters with clear recorded-vs-live labeling.
 
 ## Blockers
 
