@@ -13,8 +13,20 @@ def test_builder_closes_previous_bucket_without_future_trade_inclusion() -> None
     base = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
 
     assert builder.add(Trade(instrument_id, base, Decimal("100"), 2)) is None
-    assert builder.add(Trade(instrument_id, base + timedelta(seconds=30), Decimal("102"), 3)) is None
-    closed = builder.add(Trade(instrument_id, base + timedelta(minutes=1), Decimal("200"), 5))
+    second_trade = Trade(
+        instrument_id,
+        base + timedelta(seconds=30),
+        Decimal("102"),
+        3,
+    )
+    assert builder.add(second_trade) is None
+    boundary_trade = Trade(
+        instrument_id,
+        base + timedelta(minutes=1),
+        Decimal("200"),
+        5,
+    )
+    closed = builder.add(boundary_trade)
 
     assert closed is not None
     assert closed.open == Decimal("100")
@@ -34,7 +46,14 @@ def test_builder_rejects_out_of_order_trade() -> None:
     instrument_id = uuid.uuid4()
     builder = CandleBuilder(instrument_id, interval=timedelta(minutes=1))
     base = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
-    builder.add(Trade(instrument_id, base + timedelta(seconds=10), Decimal("100"), 1))
+    builder.add(
+        Trade(
+            instrument_id,
+            base + timedelta(seconds=10),
+            Decimal("100"),
+            1,
+        )
+    )
 
     with pytest.raises(ValueError, match="out-of-order"):
         builder.add(Trade(instrument_id, base, Decimal("99"), 1))
