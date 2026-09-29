@@ -17,9 +17,25 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    exchange = sa.Enum("NSE", "BSE", name="exchange_enum")
-    segment = sa.Enum("CASH", "FUTURES", "OPTIONS", name="segment_enum")
-    option_type = sa.Enum("CALL", "PUT", name="option_type_enum")
+    exchange = postgresql.ENUM(
+        "NSE",
+        "BSE",
+        name="exchange_enum",
+        create_type=False,
+    )
+    segment = postgresql.ENUM(
+        "CASH",
+        "FUTURES",
+        "OPTIONS",
+        name="segment_enum",
+        create_type=False,
+    )
+    option_type = postgresql.ENUM(
+        "CALL",
+        "PUT",
+        name="option_type_enum",
+        create_type=False,
+    )
     exchange.create(op.get_bind(), checkfirst=True)
     segment.create(op.get_bind(), checkfirst=True)
     option_type.create(op.get_bind(), checkfirst=True)
@@ -93,6 +109,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("instrument_identifiers")
     op.drop_table("instruments")
-    sa.Enum(name="option_type_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="segment_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="exchange_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="option_type_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="segment_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="exchange_enum").drop(op.get_bind(), checkfirst=True)
