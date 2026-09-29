@@ -1,14 +1,18 @@
+import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
-import uuid
 
-from trading_platform.recorded_events import RecordedMarketEvent
+from trading_platform.recorded_events import RecordedMarketEvent, normalize_recorded_events
 from trading_platform.recorded_io import load_recorded_events_jsonl
 
 
 class HistoricalEventSource(Protocol):
-    def load(self, *, instrument_id: uuid.UUID | None = None) -> tuple[RecordedMarketEvent, ...]: ...
+    def load(
+        self,
+        *,
+        instrument_id: uuid.UUID | None = None,
+    ) -> tuple[RecordedMarketEvent, ...]: ...
 
 
 class JsonlRecordedEventSource:
@@ -31,8 +35,6 @@ def load_many(
     *,
     instrument_id: uuid.UUID | None = None,
 ) -> tuple[RecordedMarketEvent, ...]:
-    from trading_platform.recorded_events import normalize_recorded_events
-
     events: list[RecordedMarketEvent] = []
     for source in sources:
         events.extend(source.load(instrument_id=instrument_id))
