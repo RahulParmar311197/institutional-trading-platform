@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from redis.asyncio import Redis
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from trading_platform.config import Settings
 
@@ -13,6 +13,11 @@ class Infrastructure:
         self.db: AsyncEngine = create_async_engine(
             settings.database_url,
             pool_pre_ping=True,
+        )
+        self.sessions = async_sessionmaker(
+            self.db,
+            class_=AsyncSession,
+            expire_on_commit=False,
         )
         self.redis: Redis = Redis.from_url(
             settings.redis_url,
