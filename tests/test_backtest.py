@@ -40,6 +40,16 @@ def risk_engine(*, max_order: str = "100000") -> RiskEngine:
     )
 
 
+def make_backtester(*, max_order: str = "100000") -> EventDrivenBacktester:
+    return EventDrivenBacktester(
+        interval=timedelta(minutes=1),
+        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
+        risk_engine=risk_engine(max_order=max_order),
+        requested_quantity=1,
+        starting_equity=Decimal("10000"),
+    )
+
+
 def test_event_driven_backtest_is_repeatable_and_applies_fees() -> None:
     events = [
         event("5", 4, "98"),
@@ -107,15 +117,24 @@ def test_execution_assumptions_reject_impossible_slippage() -> None:
         ExecutionAssumptions(slippage_bps=Decimal("10000"))
 
 
+def test_appending_future_event_does_not_change_already_emitted_trade() -> None:
+    prefix = [
+        event("1", 0, "100"),
+        event("2", 1, "99"),
+        event("3", 2, "101"),
+        event("4", 3, "101"),
+    ]
+    first = make_backtester().run(prefix)
+    extended = make_backtester().run([*prefix, event("5", 4, "50")])
+
+    assert len(first.trades) == 1
+    assert extended.trades[0] == first.trades[0]
+    assert first.trades[0].action is DecisionAction.LONG
+    assert first.trades[0].reference_price == Decimal("101")
+
+
 def test_risk_rejections_do_not_create_backtest_trades() -> None:
-    backtester = EventDrivenBacktester(
-        interval=timedelta(minutes=1),
-        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
-        risk_engine=risk_engine(max_order="50"),
-        requested_quantity=1,
-        starting_equity=Decimal("10000"),
-    )
-    result = backtester.run(
+    result = make_backtester(max_order="50").run(
         [
             event("1", 0, "100"),
             event("2", 1, "99"),
