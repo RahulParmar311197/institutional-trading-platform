@@ -41,12 +41,37 @@ class BacktestTrade:
     reference_price: Decimal
     fill_price: Decimal
     fee: Decimal
+    realized_pnl_delta: Decimal
     realized_pnl_after: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class EquityPoint:
+    event_id: str
+    mark_price: Decimal
+    equity: Decimal
+    drawdown: Decimal
+    drawdown_pct: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class BacktestMetrics:
+    total_return: Decimal
+    max_drawdown: Decimal
+    max_drawdown_pct: Decimal
+    trade_count: int
+    winning_realizations: int
+    losing_realizations: int
+    gross_profit: Decimal
+    gross_loss: Decimal
+    profit_factor: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
 class BacktestResult:
     trades: tuple[BacktestTrade, ...]
+    equity_curve: tuple[EquityPoint, ...]
+    metrics: BacktestMetrics
     rejected_decisions: int
     final_position_quantity: int
     final_position_average_price: Decimal
@@ -95,48 +120,96 @@ class EventDrivenBacktester:
             strategy=self.strategy,
         )
         paper = PaperTradingEngine(risk_engine=self.risk_engine)
+        steps = pipeline.run(list(normalized))
         trades: list[BacktestTrade] = []
+        equity_curve: list[EquityPoint] = []
         rejected = 0
         total_fees = Decimal("0")
+        peak_equity = self.starting_equity
 
-        for step in pipeline.run(list(normalized)):
+        for event, step in zip(normalized, steps, strict=True):
             decision = step.decision
-            if decision is None or not decision.directional:
-                continue
-
-            fill_price = self.assumptions.fill_price(decision)
-            execution = paper.execute_market(
-                decision,
-                requested_quantity=self.requested_quantity,
-                fill_id=f"backtest:{step.event_id}:{len(trades)}",
-                fill_price=fill_price,
-            )
-            if execution.risk_decision.decision is not RiskDecisionType.APPROVE:
-                rejected += 1
-                continue
-            if execution.order is None or execution.position is None:
-                raise RuntimeError("approved backtest execution did not produce order and position")
-
-            fee = self.assumptions.fee_per_filled_order
-            total_fees += fee
-            trades.append(
-                BacktestTrade(
-                    event_id=step.event_id,
-                    action=decision.action,
-                    quantity=execution.order.filled_quantity,
-                    reference_price=decision.reference_price,
+            if decision is not None and decision.directional:
+                previous_position = paper.broker.positions.get(instrument_id)
+                realized_before = (
+                    previous_position.realized_pnl
+                    if previous_position is not None
+                    else Decimal("0")
+                )
+                fill_price = self.assumptions.fill_price(decision)
+                execution = paper.execute_market(
+                    decision,
+                    requested_quantity=self.requested_quantity,
+                    fill_id=f"backtest:{step.event_id}:{len(trades)}",
                     fill_price=fill_price,
-                    fee=fee,
-                    realized_pnl_after=execution.position.realized_pnl,
+                )
+                if execution.risk_decision.decision is not RiskDecisionType.APPROVE:
+                    rejected += 1
+                else:
+                    if execution.order is None or execution.position is None:
+                        raise RuntimeError(
+                            "approved backtest execution did not produce order and position"
+                        )
+                    fee = self.assumptions.fee_per_filled_order
+                    total_fees += fee
+                    realized_delta = execution.position.realized_pnl - realized_before
+                    trades.append(
+                        BacktestTrade(
+                            event_id=step.event_id,
+                            action=decision.action,
+                            quantity=execution.order.filled_quantity,
+                            reference_price=decision.reference_price,
+                            fill_price=fill_price,
+                            fee=fee,
+                            realized_pnl_delta=realized_delta,
+                            realized_pnl_after=execution.position.realized_pnl,
+                        )
+                    )
+
+            position = paper.broker.positions.get(instrument_id, Position())
+            unrealized = (
+                position.unrealized_pnl(event.price)
+                if position.quantity
+                else Decimal("0")
+            )
+            equity = (
+                self.starting_equity
+                + position.realized_pnl
+                + unrealized
+                - total_fees
+            )
+            peak_equity = max(peak_equity, equity)
+            drawdown = peak_equity - equity
+            drawdown_pct = drawdown / peak_equity
+            equity_curve.append(
+                EquityPoint(
+                    event_id=event.event_id,
+                    mark_price=event.price,
+                    equity=equity,
+                    drawdown=drawdown,
+                    drawdown_pct=drawdown_pct,
                 )
             )
 
         position = paper.broker.positions.get(instrument_id, Position())
         final_mark = normalized[-1].price
-        unrealized = position.unrealized_pnl(final_mark) if position.quantity else Decimal("0")
+        unrealized = (
+            position.unrealized_pnl(final_mark)
+            if position.quantity
+            else Decimal("0")
+        )
         net_pnl = position.realized_pnl + unrealized - total_fees
+        final_equity = self.starting_equity + net_pnl
+        metrics = _calculate_metrics(
+            trades=trades,
+            equity_curve=equity_curve,
+            starting_equity=self.starting_equity,
+            final_equity=final_equity,
+        )
         return BacktestResult(
             trades=tuple(trades),
+            equity_curve=tuple(equity_curve),
+            metrics=metrics,
             rejected_decisions=rejected,
             final_position_quantity=position.quantity,
             final_position_average_price=position.average_price,
@@ -144,5 +217,36 @@ class EventDrivenBacktester:
             unrealized_pnl=unrealized,
             total_fees=total_fees,
             net_pnl=net_pnl,
-            final_equity=self.starting_equity + net_pnl,
+            final_equity=final_equity,
         )
+
+
+def _calculate_metrics(
+    *,
+    trades: list[BacktestTrade],
+    equity_curve: list[EquityPoint],
+    starting_equity: Decimal,
+    final_equity: Decimal,
+) -> BacktestMetrics:
+    realization_deltas = [trade.realized_pnl_delta for trade in trades]
+    positive = [value for value in realization_deltas if value > 0]
+    negative = [value for value in realization_deltas if value < 0]
+    gross_profit = sum(positive, Decimal("0"))
+    gross_loss = -sum(negative, Decimal("0"))
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
+    max_drawdown = max((point.drawdown for point in equity_curve), default=Decimal("0"))
+    max_drawdown_pct = max(
+        (point.drawdown_pct for point in equity_curve),
+        default=Decimal("0"),
+    )
+    return BacktestMetrics(
+        total_return=(final_equity - starting_equity) / starting_equity,
+        max_drawdown=max_drawdown,
+        max_drawdown_pct=max_drawdown_pct,
+        trade_count=len(trades),
+        winning_realizations=len(positive),
+        losing_realizations=len(negative),
+        gross_profit=gross_profit,
+        gross_loss=gross_loss,
+        profit_factor=profit_factor,
+    )
