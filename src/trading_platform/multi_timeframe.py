@@ -1,6 +1,6 @@
 import uuid
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from trading_platform.candles import Candle, Trade
 from trading_platform.sessions import TradingSession
@@ -11,12 +11,12 @@ class SessionCandleBuilder:
     instrument_id: uuid.UUID
     interval: timedelta
     session: TradingSession
+    _trades: list[Trade] = field(default_factory=list, init=False)
+    _start: datetime | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.interval <= timedelta(0):
             raise ValueError("interval must be positive")
-        self._trades: list[Trade] = []
-        self._start = None
 
     def add(self, trade: Trade) -> Candle | None:
         if trade.instrument_id != self.instrument_id:
