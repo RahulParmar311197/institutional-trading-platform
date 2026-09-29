@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: itp
+      POSTGRES_USER: itp
+      POSTGRES_PASSWORD: itp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itp -d itp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: .
+    environment:
+      ITP_ENVIRONMENT: local
+      ITP_LIVE_TRADING_ENABLED: "false"
+      ITP_DATABASE_URL: postgresql+asyncpg://itp:itp@postgres:5432/itp
+      ITP_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
