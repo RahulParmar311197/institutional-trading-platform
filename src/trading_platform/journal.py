@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -51,6 +52,9 @@ class ExecutionJournal:
         )
         self._events.append(event)
         return event
+
+    def extend(self, events: Iterable[JournalEvent]) -> None:
+        self._events.extend(events)
 
     @property
     def events(self) -> tuple[JournalEvent, ...]:
