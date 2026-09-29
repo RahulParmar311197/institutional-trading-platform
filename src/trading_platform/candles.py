@@ -42,11 +42,12 @@ class CandleBuilder:
         if self._trades and trade.timestamp < self._trades[-1].timestamp:
             raise ValueError("out-of-order trade")
 
-        if self._start is None:
-            self._start = self._bucket_start(trade.timestamp)
+        start = self._start
+        if start is None:
+            start = self._bucket_start(trade.timestamp)
+            self._start = start
 
-        assert self._start is not None
-        if trade.timestamp >= self._start + self.interval:
+        if trade.timestamp >= start + self.interval:
             completed = self.snapshot(closed=True)
             self._trades = []
             self._start = self._bucket_start(trade.timestamp)
