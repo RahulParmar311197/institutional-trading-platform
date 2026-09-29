@@ -128,24 +128,23 @@ class DurablePaperTradingService:
             },
         )
 
-        async with self.sessions() as session:
-            async with session.begin():
-                trading_repository = TradingRepository(session)
-                await trading_repository.persist_order(staged_order)
-                fill_inserted = await trading_repository.persist_fill(
-                    order_id=staged_order.id,
-                    external_fill_id=fill_id,
-                    source="paper",
-                    quantity=staged_order.filled_quantity,
-                    price=fill_price,
-                    occurred_at=staged_journal.events[-2].timestamp,
-                )
-                if not fill_inserted:
-                    raise DuplicateFillError(f"duplicate paper fill id: {fill_id}")
+        async with self.sessions() as session, session.begin():
+            trading_repository = TradingRepository(session)
+            await trading_repository.persist_order(staged_order)
+            fill_inserted = await trading_repository.persist_fill(
+                order_id=staged_order.id,
+                external_fill_id=fill_id,
+                source="paper",
+                quantity=staged_order.filled_quantity,
+                price=fill_price,
+                occurred_at=staged_journal.events[-2].timestamp,
+            )
+            if not fill_inserted:
+                raise DuplicateFillError(f"duplicate paper fill id: {fill_id}")
 
-                audit_repository = AuditRepository(session)
-                for event in staged_journal.events:
-                    await audit_repository.persist_journal_event(event)
+            audit_repository = AuditRepository(session)
+            for event in staged_journal.events:
+                await audit_repository.persist_journal_event(event)
 
         self.oms.register(staged_order)
         self.broker.positions[decision.instrument_id] = staged_position
@@ -153,8 +152,7 @@ class DurablePaperTradingService:
         return PaperExecutionResult(risk_decision, staged_order, staged_position)
 
     async def _persist_journal(self, journal: ExecutionJournal) -> None:
-        async with self.sessions() as session:
-            async with session.begin():
-                repository = AuditRepository(session)
-                for event in journal.events:
-                    await repository.persist_journal_event(event)
+        async with self.sessions() as session, session.begin():
+            repository = AuditRepository(session)
+            for event in journal.events:
+                await repository.persist_journal_event(event)
