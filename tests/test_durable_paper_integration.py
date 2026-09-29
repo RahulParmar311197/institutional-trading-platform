@@ -71,11 +71,24 @@ async def test_durable_execution_commits_before_publishing_and_rejects_duplicate
         assert result.position.quantity == 4
         assert service.oms.get(result.order.id) is result.order
         assert len(service.journal.events) == 6
+        audit_ids = [event.id for event in service.journal.events]
 
         async with infrastructure.sessions() as session:
-            order_count = await session.scalar(select(func.count()).select_from(OrderRecord))
-            fill_count = await session.scalar(select(func.count()).select_from(FillRecord))
-            audit_count = await session.scalar(select(func.count()).select_from(AuditEvent))
+            order_count = await session.scalar(
+                select(func.count())
+                .select_from(OrderRecord)
+                .where(OrderRecord.instrument_id == instrument_id)
+            )
+            fill_count = await session.scalar(
+                select(func.count())
+                .select_from(FillRecord)
+                .where(FillRecord.order_id == result.order.id)
+            )
+            audit_count = await session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.id.in_(audit_ids))
+            )
             assert order_count == 1
             assert fill_count == 1
             assert audit_count == 6
@@ -100,9 +113,21 @@ async def test_durable_execution_commits_before_publishing_and_rejects_duplicate
         assert service.broker.positions[instrument_id].quantity == 4
         assert len(service.journal.events) == 6
         async with infrastructure.sessions() as session:
-            order_count = await session.scalar(select(func.count()).select_from(OrderRecord))
-            fill_count = await session.scalar(select(func.count()).select_from(FillRecord))
-            audit_count = await session.scalar(select(func.count()).select_from(AuditEvent))
+            order_count = await session.scalar(
+                select(func.count())
+                .select_from(OrderRecord)
+                .where(OrderRecord.instrument_id == instrument_id)
+            )
+            fill_count = await session.scalar(
+                select(func.count())
+                .select_from(FillRecord)
+                .where(FillRecord.external_fill_id == "durable-fill-001")
+            )
+            audit_count = await session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.id.in_(audit_ids))
+            )
             assert order_count == 1
             assert fill_count == 1
             assert audit_count == 6
