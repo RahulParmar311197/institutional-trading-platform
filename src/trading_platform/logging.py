@@ -1,6 +1,8 @@
 import logging
+from typing import cast
 
 import structlog
+from structlog.typing import FilteringBoundLogger
 
 
 def configure_logging() -> None:
@@ -18,5 +20,5 @@ def configure_logging() -> None:
     )
 
 
-def get_logger() -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger()
+def get_logger() -> FilteringBoundLogger:
+    return cast(FilteringBoundLogger, structlog.get_logger())
