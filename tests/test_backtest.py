@@ -2,6 +2,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from trading_platform.backtest import EventDrivenBacktester, ExecutionAssumptions
 from trading_platform.decision import DecisionAction
 from trading_platform.pipeline import ReplayStrategyPipeline
@@ -98,6 +100,11 @@ def test_backtest_slippage_moves_fill_against_trade_direction() -> None:
 
     assert long_decision is not None
     assert assumptions.fill_price(long_decision) == Decimal("101.101")
+
+
+def test_execution_assumptions_reject_impossible_slippage() -> None:
+    with pytest.raises(ValueError, match="slippage_bps"):
+        ExecutionAssumptions(slippage_bps=Decimal("10000"))
 
 
 def test_risk_rejections_do_not_create_backtest_trades() -> None:
