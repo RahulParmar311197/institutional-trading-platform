@@ -10,33 +10,42 @@ from trading_platform.strategy import SignalDirection
 class Position:
     quantity: int = 0
     average_price: Decimal = Decimal("0")
+    realized_pnl: Decimal = Decimal("0")
 
     def apply_fill(self, *, direction: SignalDirection, quantity: int, price: Decimal) -> None:
         if quantity <= 0 or price <= 0:
             raise ValueError("fill quantity and price must be positive")
-        signed_quantity = quantity if direction is SignalDirection.LONG else -quantity
-        new_quantity = self.quantity + signed_quantity
+        if direction is SignalDirection.FLAT:
+            raise ValueError("paper fills require a directional side")
 
-        same_direction = self.quantity == 0 or (self.quantity > 0) == (signed_quantity > 0)
-        if same_direction:
-            total_cost = (self.average_price * Decimal(abs(self.quantity))) + (
+        signed_quantity = quantity if direction is SignalDirection.LONG else -quantity
+        old_quantity = self.quantity
+        new_quantity = old_quantity + signed_quantity
+
+        if old_quantity == 0 or (old_quantity > 0) == (signed_quantity > 0):
+            total_cost = (self.average_price * Decimal(abs(old_quantity))) + (
                 price * Decimal(quantity)
             )
             self.quantity = new_quantity
-            self.average_price = total_cost / Decimal(abs(self.quantity))
+            self.average_price = total_cost / Decimal(abs(new_quantity))
             return
 
-        if new_quantity == 0:
-            self.quantity = 0
-            self.average_price = Decimal("0")
-            return
-
-        if (self.quantity > 0) != (new_quantity > 0):
-            self.quantity = new_quantity
-            self.average_price = price
-            return
+        closed_quantity = min(abs(old_quantity), quantity)
+        if old_quantity > 0:
+            self.realized_pnl += (price - self.average_price) * Decimal(closed_quantity)
+        else:
+            self.realized_pnl += (self.average_price - price) * Decimal(closed_quantity)
 
         self.quantity = new_quantity
+        if new_quantity == 0:
+            self.average_price = Decimal("0")
+        elif (old_quantity > 0) != (new_quantity > 0):
+            self.average_price = price
+
+    def unrealized_pnl(self, mark_price: Decimal) -> Decimal:
+        if mark_price <= 0:
+            raise ValueError("mark price must be positive")
+        return (mark_price - self.average_price) * Decimal(self.quantity)
 
 
 class PaperBroker:
