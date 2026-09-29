@@ -45,7 +45,12 @@ class ManagedOrder:
             self.state = OrderState.PARTIALLY_FILLED
 
     def cancel(self) -> None:
-        if self.state not in {OrderState.CREATED, OrderState.SUBMITTED, OrderState.PARTIALLY_FILLED}:
+        cancellable_states = {
+            OrderState.CREATED,
+            OrderState.SUBMITTED,
+            OrderState.PARTIALLY_FILLED,
+        }
+        if self.state not in cancellable_states:
             raise ValueError("order cannot be cancelled in its current state")
         self.state = OrderState.CANCELLED
 
