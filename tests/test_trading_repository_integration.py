@@ -10,7 +10,7 @@ from trading_platform.config import Settings
 from trading_platform.decision import decide
 from trading_platform.infrastructure import Infrastructure
 from trading_platform.instruments import Exchange, Instrument, Segment
-from trading_platform.oms import OrderManagementSystem
+from trading_platform.oms import OrderManagementSystem, OrderState
 from trading_platform.paper import PaperBroker
 from trading_platform.risk import RiskEngine, RiskLimits, build_approved_intent
 from trading_platform.strategy import SignalDirection, StrategySignal
@@ -20,12 +20,15 @@ from trading_platform.trading_repository import TradingRepository
 pytestmark = pytest.mark.asyncio
 
 
-async def test_repository_persists_order_and_deduplicates_fill() -> None:
+async def test_repository_persists_and_recovers_idempotent_order_state() -> None:
     if os.environ.get("ITP_RUN_INTEGRATION_TESTS") != "1":
         pytest.skip("set ITP_RUN_INTEGRATION_TESTS=1 to run PostgreSQL integration tests")
 
     infrastructure = Infrastructure(Settings(_env_file=None))
     instrument_id = uuid.uuid4()
+    order_id: uuid.UUID
+    intent_id: uuid.UUID
+    decision_id: uuid.UUID
     try:
         async with infrastructure.sessions() as session:
             instrument = Instrument(
@@ -96,5 +99,22 @@ async def test_repository_persists_order_and_deduplicates_fill() -> None:
             assert inserted is True
             assert duplicate is False
             assert fill_count == 1
+
+            order_id = order.id
+            intent_id = intent.id
+            decision_id = decision.id
+
+        async with infrastructure.sessions() as recovery_session:
+            recovered = await TradingRepository(recovery_session).load_order(order_id)
+            assert recovered is not None
+            assert recovered.state is OrderState.FILLED
+            assert recovered.filled_quantity == 3
+            assert recovered.intent.id == intent_id
+            assert recovered.intent.decision_id == decision_id
+            assert recovered.processed_fill_ids == {"db-fill-001"}
+
+            recovered.apply_fill(fill_id="db-fill-001", quantity=3)
+            assert recovered.filled_quantity == 3
+            assert recovered.state is OrderState.FILLED
     finally:
         await infrastructure.close()
