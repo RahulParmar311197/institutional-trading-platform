@@ -1,10 +1,10 @@
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from trading_platform.config import Settings, get_settings
@@ -32,7 +32,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
 
     @app.middleware("http")
-    async def correlation_middleware(request: Request, call_next: Any) -> Any:
+    async def correlation_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
         request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
