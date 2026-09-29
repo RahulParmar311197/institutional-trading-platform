@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trading_platform.oms import ManagedOrder, OrderState
+from trading_platform.paper import Position
 from trading_platform.risk import ApprovedOrderIntent
 from trading_platform.strategy import SignalDirection
 from trading_platform.trading_models import FillRecord, OrderRecord
@@ -91,3 +92,19 @@ class TradingRepository:
             filled_quantity=record.filled_quantity,
             processed_fill_ids=fill_ids,
         )
+
+    async def rebuild_position(self, instrument_id: uuid.UUID) -> Position:
+        rows = await self.session.execute(
+            select(OrderRecord.side, FillRecord.quantity, FillRecord.price)
+            .join(FillRecord, FillRecord.order_id == OrderRecord.id)
+            .where(OrderRecord.instrument_id == instrument_id)
+            .order_by(FillRecord.occurred_at, FillRecord.id)
+        )
+        position = Position()
+        for side, quantity, price in rows:
+            position.apply_fill(
+                direction=SignalDirection(side),
+                quantity=quantity,
+                price=price,
+            )
+        return position
