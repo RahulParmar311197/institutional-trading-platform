@@ -2,10 +2,13 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from trading_platform.oms import ManagedOrder
+from trading_platform.oms import ManagedOrder, OrderState
+from trading_platform.risk import ApprovedOrderIntent
+from trading_platform.strategy import SignalDirection
 from trading_platform.trading_models import FillRecord, OrderRecord
 
 
@@ -62,3 +65,29 @@ class TradingRepository:
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none() is not None
+
+    async def load_order(self, order_id: uuid.UUID) -> ManagedOrder | None:
+        record = await self.session.get(OrderRecord, order_id)
+        if record is None:
+            return None
+
+        fill_ids_result = await self.session.scalars(
+            select(FillRecord.external_fill_id).where(FillRecord.order_id == order_id)
+        )
+        fill_ids = set(fill_ids_result.all())
+        intent = ApprovedOrderIntent(
+            id=record.intent_id,
+            decision_id=record.decision_id,
+            instrument_id=record.instrument_id,
+            direction=SignalDirection(record.side),
+            quantity=record.requested_quantity,
+            reference_price=record.reference_price,
+            strategy_id=record.strategy_id,
+        )
+        return ManagedOrder(
+            id=record.id,
+            intent=intent,
+            state=OrderState(record.state),
+            filled_quantity=record.filled_quantity,
+            processed_fill_ids=fill_ids,
+        )
