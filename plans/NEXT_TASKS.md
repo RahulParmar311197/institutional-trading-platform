@@ -1,33 +1,50 @@
 # Next Tasks
 
-Tasks are ordered. Do not skip critical validation to work on optional features.
+Tasks are ordered by engineering risk. Do not skip validation to work on optional features.
 
-## P0 — Phase 1 foundation
+## P0 — Get `main` green
 
-1. Create `pyproject.toml` with pinned-compatible backend/tooling dependencies and Python 3.12 baseline.
-2. Create backend package/application structure without empty speculative modules.
-3. Implement typed settings with explicit environment and `live_trading_enabled=false` default.
-4. Implement FastAPI app factory plus `/health/live` and `/health/ready`.
-5. Add SQLAlchemy async database boundary and Alembic.
-6. Add Redis health/connectivity boundary.
-7. Add structured logging and request/trace correlation foundation.
-8. Add initial append-oriented audit-event model/migration.
-9. Add unit/integration tests for settings, health and dependency failures.
-10. Add Dockerfile and Docker Compose for API/PostgreSQL/Redis.
-11. Add Ruff, MyPy, Pytest and Bandit checks.
-12. Add GitHub Actions CI.
-13. Add `.env.example`, `.gitignore`, security and developer setup documentation.
-14. Run/verify all available checks; fix failures rather than weakening tests.
-15. Update `docs/IMPLEMENTATION_STATUS.md` with actual evidence.
+1. Resolve all Ruff failures.
+2. Resolve all MyPy failures without weakening strict typing.
+3. Resolve all Pytest failures without weakening valid tests.
+4. Resolve Bandit findings by root cause.
+5. Confirm Docker image builds in CI.
+6. Add migration apply/rollback integration validation against PostgreSQL.
+7. Add structured logging/request correlation that is actually exercised.
+8. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with CI evidence.
 
-## P1 — First trading vertical slice after foundation
+## P1 — Complete first paper-trading vertical slice
 
-Instrument master → recorded/historical market data → validation → candle aggregation → indicators → deterministic SMC/ICT → strategy → decision → risk → OMS → paper broker → fill → position/P&L → reconciliation → journal → API/UI → E2E.
+1. Add explicit decision contract between strategy and risk.
+2. Persist order intents, OMS orders, order events and fills.
+3. Add deterministic paper realized/unrealized P&L.
+4. Add reconciliation between internal OMS/fills/positions and paper-broker truth.
+5. Add journal/audit records for signal → risk → order → fill → position.
+6. Add E2E test proving one paper trade through the full path.
+7. Add restart/idempotency tests for duplicate fills and recovered open orders.
+
+## P2 — Quant expansion after vertical slice is green
+
+1. Complete multi-timeframe candle aggregation/session boundaries.
+2. Add ATR/ADX/VWAP and regression/reference tests.
+3. Add deterministic swing/market-structure primitives.
+4. Add BOS/CHoCH/FVG only with explicit no-look-ahead definitions and tests.
+5. Add regime engine and scanner only after feature primitives are stable.
+
+## Later
+
+- event-driven backtester/replay
+- Upstox/Dhan adapters in safe/shadow mode
+- options engine
+- frontend workspaces
+- ML subsystem
+- controlled live release
 
 ## Constraints
 
-- No live execution during Phase 1.
+- Work directly on `main`; do not create branches/PRs for this project unless the user changes that instruction.
+- Live execution remains disabled.
 - No hardcoded success responses representing real integrations.
-- No secrets in repository.
-- No broad placeholder package generation merely to make the tree look complete.
-- A feature remains unverified until its required tests/checks have run successfully.
+- No secrets in the repository.
+- No broad placeholder package generation.
+- A capability remains unverified until its required checks actually pass.
