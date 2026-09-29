@@ -105,7 +105,8 @@ async def test_repository_persists_and_recovers_idempotent_order_state() -> None
             decision_id = decision.id
 
         async with infrastructure.sessions() as recovery_session:
-            recovered = await TradingRepository(recovery_session).load_order(order_id)
+            recovery_repository = TradingRepository(recovery_session)
+            recovered = await recovery_repository.load_order(order_id)
             assert recovered is not None
             assert recovered.state is OrderState.FILLED
             assert recovered.filled_quantity == 3
@@ -116,5 +117,10 @@ async def test_repository_persists_and_recovers_idempotent_order_state() -> None
             recovered.apply_fill(fill_id="db-fill-001", quantity=3)
             assert recovered.filled_quantity == 3
             assert recovered.state is OrderState.FILLED
+
+            recovered_position = await recovery_repository.rebuild_position(instrument_id)
+            assert recovered_position.quantity == 3
+            assert recovered_position.average_price == Decimal("101")
+            assert recovered_position.realized_pnl == Decimal("0")
     finally:
         await infrastructure.close()
