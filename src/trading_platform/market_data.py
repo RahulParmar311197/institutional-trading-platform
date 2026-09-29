@@ -35,7 +35,12 @@ class QualityAssessment:
         return self.quality is DataQuality.GOOD
 
 
-def assess_quote(quote: Quote, *, now: datetime, max_age: timedelta = timedelta(seconds=5)) -> QualityAssessment:
+def assess_quote(
+    quote: Quote,
+    *,
+    now: datetime,
+    max_age: timedelta = timedelta(seconds=5),
+) -> QualityAssessment:
     reasons: list[str] = []
     if quote.bid <= 0 or quote.ask <= 0:
         reasons.append("NON_POSITIVE_PRICE")
@@ -46,7 +51,8 @@ def assess_quote(quote: Quote, *, now: datetime, max_age: timedelta = timedelta(
     if now - quote.exchange_timestamp > max_age:
         reasons.append("STALE_QUOTE")
 
-    if "NON_POSITIVE_PRICE" in reasons or "CROSSED_MARKET" in reasons or "FUTURE_TIMESTAMP" in reasons:
+    invalid_reasons = {"NON_POSITIVE_PRICE", "CROSSED_MARKET", "FUTURE_TIMESTAMP"}
+    if invalid_reasons.intersection(reasons):
         quality = DataQuality.INVALID
     elif "STALE_QUOTE" in reasons:
         quality = DataQuality.STALE
