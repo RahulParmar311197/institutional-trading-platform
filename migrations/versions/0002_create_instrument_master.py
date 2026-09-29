@@ -39,12 +39,29 @@ def upgrade() -> None:
         sa.Column("lot_size", sa.Integer(), nullable=False),
         sa.Column("tick_size", sa.Numeric(20, 8), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("exchange", "segment", "trading_symbol", "expiry", "strike", "option_type", name="uq_instrument_contract"),
+        sa.UniqueConstraint(
+            "exchange",
+            "segment",
+            "trading_symbol",
+            "expiry",
+            "strike",
+            "option_type",
+            name="uq_instrument_contract",
+        ),
     )
     op.create_index("ix_instruments_trading_symbol", "instruments", ["trading_symbol"])
-    op.create_index("ix_instruments_underlying_symbol", "instruments", ["underlying_symbol"])
+    op.create_index(
+        "ix_instruments_underlying_symbol",
+        "instruments",
+        ["underlying_symbol"],
+    )
 
     op.create_table(
         "instrument_identifiers",
@@ -54,11 +71,23 @@ def upgrade() -> None:
         sa.Column("external_id", sa.String(200), nullable=False),
         sa.Column("valid_from", sa.Date()),
         sa.Column("valid_to", sa.Date()),
-        sa.ForeignKeyConstraint(["instrument_id"], ["instruments.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["instrument_id"],
+            ["instruments.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("provider", "external_id", name="uq_instrument_provider_external_id"),
+        sa.UniqueConstraint(
+            "provider",
+            "external_id",
+            name="uq_instrument_provider_external_id",
+        ),
     )
-    op.create_index("ix_instrument_identifiers_instrument_id", "instrument_identifiers", ["instrument_id"])
+    op.create_index(
+        "ix_instrument_identifiers_instrument_id",
+        "instrument_identifiers",
+        ["instrument_id"],
+    )
 
 
 def downgrade() -> None:
