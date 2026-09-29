@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
@@ -77,7 +77,7 @@ class UpstoxHistoricalClient:
             },
         )
         response.raise_for_status()
-        payload = response.json()
+        payload: object = response.json()
         if not isinstance(payload, dict) or payload.get("status") != "success":
             raise ValueError("unexpected Upstox historical response")
         data = payload.get("data")
@@ -96,16 +96,20 @@ def _validate_upstox_interval(unit: UpstoxHistoricalUnit, interval: int) -> None
         return
     if unit is UpstoxHistoricalUnit.HOURS and 1 <= interval <= 5:
         return
-    if unit in {
-        UpstoxHistoricalUnit.DAYS,
-        UpstoxHistoricalUnit.WEEKS,
-        UpstoxHistoricalUnit.MONTHS,
-    } and interval == 1:
+    if (
+        unit
+        in {
+            UpstoxHistoricalUnit.DAYS,
+            UpstoxHistoricalUnit.WEEKS,
+            UpstoxHistoricalUnit.MONTHS,
+        }
+        and interval == 1
+    ):
         return
     raise ValueError("invalid interval for Upstox historical unit")
 
 
-def _parse_upstox_candle(raw: Any) -> HistoricalBar:
+def _parse_upstox_candle(raw: object) -> HistoricalBar:
     if not isinstance(raw, list) or len(raw) < 6:
         raise ValueError("invalid Upstox candle")
     timestamp = datetime.fromisoformat(str(raw[0]))
@@ -174,7 +178,7 @@ class DhanHistoricalClient:
             raise ValueError("Dhan intraday request datetimes must be provider-local naive values")
         if from_datetime >= to_datetime:
             raise ValueError("from_datetime must precede to_datetime")
-        if to_datetime - from_datetime > __import__("datetime").timedelta(days=90):
+        if to_datetime - from_datetime > timedelta(days=90):
             raise ValueError("Dhan intraday requests are limited to 90 days")
 
         payload: dict[str, object] = {
@@ -200,10 +204,10 @@ class DhanHistoricalClient:
             json=payload,
         )
         response.raise_for_status()
-        raw = response.json()
+        raw: object = response.json()
         if not isinstance(raw, dict):
             raise ValueError("unexpected Dhan historical response")
-        return raw
+        return cast(dict[str, Any], raw)
 
 
 def _required_text(value: str, field_name: str) -> str:
@@ -212,7 +216,11 @@ def _required_text(value: str, field_name: str) -> str:
     return value
 
 
-def _parse_dhan_bars(payload: dict[str, Any], *, source: str) -> tuple[HistoricalBar, ...]:
+def _parse_dhan_bars(
+    payload: dict[str, Any],
+    *,
+    source: str,
+) -> tuple[HistoricalBar, ...]:
     required = ("open", "high", "low", "close", "volume", "timestamp")
     series: dict[str, list[Any]] = {}
     for key in required:
