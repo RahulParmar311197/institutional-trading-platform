@@ -75,7 +75,7 @@ async def test_audit_failure_rolls_back_order_fill_and_in_memory_publish(
             )
 
         assert instrument_id not in service.broker.positions
-        assert service.journal.events == []
+        assert service.journal.events == ()
 
         async with infrastructure.sessions() as session:
             order_count = await session.scalar(
