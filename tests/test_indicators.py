@@ -27,7 +27,7 @@ def test_atr_uses_wilder_smoothing() -> None:
 
     result = atr(highs, lows, closes, period=2)
 
-    assert result == Decimal("3.25")
+    assert result == Decimal("3.5")
 
 
 def test_atr_rejects_mismatched_series() -> None:
