@@ -1,58 +1,67 @@
 # Current Phase
 
-## Phase 1 stabilization + first paper-trading vertical slice
+## Phase 2/3 — Market-data and deterministic quant foundation
 
 Status: `IN_PROGRESS`
 
+### Completed foundation milestone
+
+The first deterministic paper-trading vertical slice is green in CI:
+
+Market/feature inputs → strategy signal → TradingDecision → independent risk → OMS → transactional durable paper execution → fill → position/P&L → audit → reconciliation → restart recovery.
+
+Validated infrastructure includes PostgreSQL migrations/integration tests, Docker build, strict typing, lint and Bandit.
+
 ### Current objective
 
-Get the existing foundation green in CI, then complete the smallest deterministic end-to-end paper path before adding broader strategy/SMC/options/ML scope.
+Build the data/quant layer required for trustworthy research and replay before adding real broker execution:
 
-### Implemented but still under validation
+- provider-neutral recorded/historical market-data ingestion
+- explicit event timestamps/provenance
+- configurable exchange/session calendar boundaries
+- session-aware multi-timeframe candles
+- deterministic technical/price-action/SMC primitives
+- replay-compatible interfaces
+- data-quality gates
 
-- Python 3.12 project/tooling
-- FastAPI application
-- fail-safe typed settings (`live_trading_enabled=false` by default)
-- PostgreSQL async boundary + Alembic
-- Redis readiness boundary
-- liveness/readiness endpoints
-- audit-event persistence foundation
-- Docker/Compose
-- GitHub Actions CI
+### Already validated in this phase
+
 - canonical instrument master/provider identifiers
 - quote-quality validation
-- deterministic candle builder
-- SMA/EMA/RSI
-- strategy signal contract and EMA crossover baseline
-- independent pre-trade notional risk checks
-- OMS state machine with fill idempotency
-- deterministic paper market execution and position tracking
+- configurable trading sessions
+- session-anchored multi-timeframe candles
+- SMA/EMA/RSI/ATR/VWAP
+- confirmed swing detection with explicit confirmation timing
+- deterministic structure-break detection
+- deterministic three-candle FVG detection using closed candles only
 
-### Immediate engineering gate
+### Immediate engineering gates
 
-CI must pass:
+Every addition must keep `main` green across:
 
 - Ruff
-- MyPy
-- Pytest
+- strict MyPy
+- migrations against PostgreSQL when schema changes
+- unit/integration tests
 - Bandit
+- migration rollback/reapply
 - Docker build
 
-No component moves to `TESTED` until the relevant checks actually pass.
+### Next vertical work
 
-### Next vertical-slice work
+Recorded market events → normalization/data-quality → replay clock/event stream → candles/features → strategy/decision/risk → existing durable paper path.
 
-Decision contract → persistent OMS/order/fill schema → paper P&L → reconciliation → journal/audit → end-to-end paper workflow test.
+In parallel, extend market structure conservatively: CHoCH/MSS/FVG lifecycle only after their deterministic availability and invalidation semantics are explicitly encoded and tested.
 
 ### Explicitly out of scope for this phase
 
 - unrestricted live order placement
+- real broker order submission
 - broker credentials in source control
 - ML-controlled execution
 - profitability claims
-- broad strategy catalog
 - Kubernetes/microservice expansion
 
 ### Safety invariant
 
-Live trading remains disabled and cannot be treated as complete or production-ready until all live gates, reconciliation and explicit operator approval exist.
+Live trading remains disabled. No broker adapter may bypass data-quality, decision, risk, OMS, audit or reconciliation controls.
