@@ -78,6 +78,26 @@ def test_event_driven_backtest_is_repeatable_and_applies_fees() -> None:
         Decimal("101"),
         Decimal("98"),
     ]
+    assert [trade.realized_pnl_delta for trade in first.trades] == [
+        Decimal("0"),
+        Decimal("-3"),
+    ]
+    assert [point.equity for point in first.equity_curve] == [
+        Decimal("10000"),
+        Decimal("10000"),
+        Decimal("10000"),
+        Decimal("9996"),
+        Decimal("9995"),
+    ]
+    assert first.metrics.trade_count == 2
+    assert first.metrics.winning_realizations == 0
+    assert first.metrics.losing_realizations == 1
+    assert first.metrics.gross_profit == Decimal("0")
+    assert first.metrics.gross_loss == Decimal("3")
+    assert first.metrics.profit_factor == Decimal("0")
+    assert first.metrics.max_drawdown == Decimal("5")
+    assert first.metrics.max_drawdown_pct == Decimal("0.0005")
+    assert first.metrics.total_return == Decimal("-0.0005")
     assert first.final_position_quantity == 0
     assert first.realized_pnl == Decimal("-3")
     assert first.unrealized_pnl == Decimal("0")
@@ -148,3 +168,5 @@ def test_risk_rejections_do_not_create_backtest_trades() -> None:
     assert result.rejected_decisions == 2
     assert result.net_pnl == Decimal("0")
     assert result.final_equity == Decimal("10000")
+    assert result.metrics.total_return == Decimal("0")
+    assert result.metrics.max_drawdown == Decimal("0")
