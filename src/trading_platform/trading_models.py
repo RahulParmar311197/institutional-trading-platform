@@ -16,6 +16,7 @@ class OrderRecord(Base):
     intent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, unique=True, index=True
     )
+    decision_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("instruments.id", ondelete="RESTRICT"),
