@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi.testclient import TestClient
 
-from trading_platform.app import create_app
+from trading_platform.app import REQUEST_ID_HEADER, create_app
 from trading_platform.config import Settings
 
 
@@ -28,6 +28,17 @@ def test_liveness_does_not_depend_on_external_services() -> None:
         response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers[REQUEST_ID_HEADER]
+
+
+def test_request_id_is_preserved() -> None:
+    app = create_app(Settings(_env_file=None))
+    request_id = "test-request-123"
+    with TestClient(app) as client:
+        response = client.get("/health/live", headers={REQUEST_ID_HEADER: request_id})
+
+    assert response.status_code == 200
+    assert response.headers[REQUEST_ID_HEADER] == request_id
 
 
 def test_readiness_fails_closed_when_dependency_is_unavailable() -> None:
