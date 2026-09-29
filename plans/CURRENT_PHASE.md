@@ -1,43 +1,52 @@
 # Current Phase
 
-## Phase 3/5 — Deterministic quant foundation into event-driven research
+## Phase 5 — Event-driven research and failure hardening
 
 Status: `IN_PROGRESS`
 
 ### Validated milestone
 
-The deterministic paper/replay vertical slice is green in CI:
+The deterministic paper/replay/research vertical slice is green in CI:
 
-Recorded market events → normalization/replay → closed candles → strategy → TradingDecision → independent risk → OMS → transactional durable paper execution → fill → position/P&L → audit → reconciliation → restart recovery.
+Recorded events / JSONL historical source → normalization/replay → closed candles → strategy → TradingDecision → independent risk → OMS/paper execution → position/P&L → audit/reconciliation/recovery.
 
-Validated safety controls now include global/account/strategy/instrument kill switches, READ_ONLY/CLOSE_ONLY/HALTED operational modes, close-only position-reduction semantics, and persistence/recovery of active risk controls.
+The same strategy/decision/risk contracts now power both replay-driven paper execution and the minimal event-driven backtester.
 
-### Quant foundation already validated
+### Safety controls already validated
+
+- live trading disabled by default
+- global/account/strategy/instrument kill switches
+- READ_ONLY/CLOSE_ONLY/HALTED operational modes
+- close-only position-reduction semantics
+- persistence/recovery of active risk controls
+- operational health gate that fails closed to READ_ONLY/HALTED
+- transaction rollback when audit persistence fails, with no partial order/fill state or in-memory economic publication
+
+### Quant/research foundation already validated
 
 - canonical instrument master/provider identifiers
+- recorded event JSONL ingestion and historical-source abstraction
 - quote-quality validation
 - configurable trading sessions
 - session-anchored multi-timeframe candles
 - SMA/EMA/RSI/ATR/VWAP
 - confirmed swing and structure-break detection
 - trend state with BOS continuation and CHoCH transition semantics
+- deterministic LOW/NORMAL/HIGH ATR-ratio volatility regime
 - three-candle FVG detection and open/partial/filled/invalidated lifecycle
 - reusable deterministic replay strategy pipeline
+- minimal event-driven backtester with explicit slippage/fee assumptions, independent risk rejection, deterministic repeatability and future-event isolation
 
 ### Current objective
 
-Build the first minimal event-driven backtesting layer on top of the same replay/strategy/decision/risk contracts already used by paper execution.
+Deepen the research engine without diverging from production-style contracts.
 
-The backtester must explicitly model its assumptions rather than silently granting ideal fills. Initial scope should include:
+Immediate work:
 
-- replay-driven chronological processing
-- deterministic strategy decisions from closed candles only
-- independent risk approval/rejection
-- explicit market-fill model
-- spread/slippage and fee hooks with safe zero defaults only when clearly configured
-- positions, realized/unrealized P&L and equity progression
-- deterministic repeatability tests
-- no-look-ahead regression tests
+1. Add an explicit backtest equity curve and deterministic core metrics such as return, maximum drawdown and trade statistics.
+2. Define MSS separately from CHoCH using explicit confirmation/availability/invalidation semantics before coding it.
+3. Add focused failure tests for database connectivity/provider interruption and persisted operational-mode transitions.
+4. Verify current official Upstox/Dhan historical-data APIs before adding authenticated provider adapters.
 
 ### Engineering gates
 
@@ -51,14 +60,6 @@ Every addition must keep `main` green across:
 - migration rollback/reapply
 - Docker build
 
-### After the minimal backtester
-
-1. Add deterministic regime primitives.
-2. Expand SMC only with explicit/testable availability and invalidation semantics.
-3. Strengthen failure injection and operational health gating.
-4. Introduce provider-neutral read-only historical adapters after verifying current official provider APIs.
-5. Keep all real broker order submission disabled until live-trading safety gates are complete and explicitly approved.
-
 ### Explicitly out of scope for the current phase
 
 - unrestricted live order placement
@@ -70,4 +71,4 @@ Every addition must keep `main` green across:
 
 ### Safety invariant
 
-Live trading remains disabled. No future broker adapter may bypass data-quality, decision, independent risk, OMS, audit, reconciliation or persisted operational controls.
+Live trading remains disabled. No future external adapter or execution path may bypass data quality, decision, independent risk, OMS, audit, reconciliation, persisted operational controls or health gating.
