@@ -11,7 +11,11 @@ from trading_platform.decision import DecisionAction, TradingDecision
 from trading_platform.risk import RiskDecisionType, RiskEngine, RiskLimits
 
 
-def decision(*, action: DecisionAction = DecisionAction.LONG, strategy_id: str = "test") -> TradingDecision:
+def decision(
+    *,
+    action: DecisionAction = DecisionAction.LONG,
+    strategy_id: str = "test",
+) -> TradingDecision:
     return TradingDecision(
         id=uuid.uuid4(),
         instrument_id=uuid.uuid4(),
@@ -47,14 +51,24 @@ def test_account_strategy_and_instrument_locks_are_scoped() -> None:
     target = decision(strategy_id="alpha-1")
 
     controls.activate(KillSwitchScope.ACCOUNT, key="acct-1", reason="account lock")
-    assert engine(controls).evaluate(target, requested_quantity=1, account_id="acct-1").reason.startswith(
-        "ACCOUNT_KILL_SWITCH"
+    account_locked = engine(controls).evaluate(
+        target,
+        requested_quantity=1,
+        account_id="acct-1",
     )
-    assert engine(controls).evaluate(target, requested_quantity=1, account_id="acct-2").decision is RiskDecisionType.APPROVE
+    assert account_locked.reason.startswith("ACCOUNT_KILL_SWITCH")
+
+    other_account = engine(controls).evaluate(
+        target,
+        requested_quantity=1,
+        account_id="acct-2",
+    )
+    assert other_account.decision is RiskDecisionType.APPROVE
 
     controls.clear(KillSwitchScope.ACCOUNT, key="acct-1")
     controls.activate(KillSwitchScope.STRATEGY, key="alpha-1", reason="strategy lock")
-    assert engine(controls).evaluate(target, requested_quantity=1).reason.startswith("STRATEGY_KILL_SWITCH")
+    strategy_locked = engine(controls).evaluate(target, requested_quantity=1)
+    assert strategy_locked.reason.startswith("STRATEGY_KILL_SWITCH")
 
     controls.clear(KillSwitchScope.STRATEGY, key="alpha-1")
     controls.activate(
@@ -62,7 +76,8 @@ def test_account_strategy_and_instrument_locks_are_scoped() -> None:
         key=instrument_lock_key(target.instrument_id),
         reason="instrument lock",
     )
-    assert engine(controls).evaluate(target, requested_quantity=1).reason.startswith("INSTRUMENT_KILL_SWITCH")
+    instrument_locked = engine(controls).evaluate(target, requested_quantity=1)
+    assert instrument_locked.reason.startswith("INSTRUMENT_KILL_SWITCH")
 
 
 def test_read_only_and_halted_modes_block_new_directional_orders() -> None:
