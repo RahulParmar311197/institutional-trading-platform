@@ -2,6 +2,7 @@ import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+from typing import Protocol
 
 from trading_platform.candles import Candle
 from trading_platform.indicators import ema
@@ -22,6 +23,13 @@ class StrategySignal:
     reason: str
 
 
+class StrategyEvaluator(Protocol):
+    @property
+    def minimum_history(self) -> int: ...
+
+    def evaluate(self, candles: list[Candle]) -> StrategySignal: ...
+
+
 class EmaCrossoverStrategy:
     def __init__(self, *, fast_period: int = 5, slow_period: int = 20) -> None:
         if fast_period <= 0 or slow_period <= 0 or fast_period >= slow_period:
@@ -30,12 +38,16 @@ class EmaCrossoverStrategy:
         self.slow_period = slow_period
         self.strategy_id = f"ema_crossover_{fast_period}_{slow_period}"
 
+    @property
+    def minimum_history(self) -> int:
+        return self.slow_period + 1
+
     def evaluate(self, candles: list[Candle]) -> StrategySignal:
         if not candles:
             raise ValueError("at least one candle is required")
         if any(not candle.closed for candle in candles):
             raise ValueError("strategy may evaluate closed candles only")
-        if len(candles) < self.slow_period + 1:
+        if len(candles) < self.minimum_history:
             raise ValueError("insufficient candles for strategy")
 
         closes = [candle.close for candle in candles]
