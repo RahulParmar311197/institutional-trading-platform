@@ -1,59 +1,65 @@
 # Current Phase
 
-## Phase 2/3 — Market-data and deterministic quant foundation
+## Phase 3/5 — Deterministic quant foundation into event-driven research
 
 Status: `IN_PROGRESS`
 
-### Completed foundation milestone
+### Validated milestone
 
-The first deterministic paper-trading vertical slice is green in CI:
+The deterministic paper/replay vertical slice is green in CI:
 
-Market/feature inputs → strategy signal → TradingDecision → independent risk → OMS → transactional durable paper execution → fill → position/P&L → audit → reconciliation → restart recovery.
+Recorded market events → normalization/replay → closed candles → strategy → TradingDecision → independent risk → OMS → transactional durable paper execution → fill → position/P&L → audit → reconciliation → restart recovery.
 
-Validated infrastructure includes PostgreSQL migrations/integration tests, Docker build, strict typing, lint and Bandit.
+Validated safety controls now include global/account/strategy/instrument kill switches, READ_ONLY/CLOSE_ONLY/HALTED operational modes, close-only position-reduction semantics, and persistence/recovery of active risk controls.
 
-### Current objective
-
-Build the data/quant layer required for trustworthy research and replay before adding real broker execution:
-
-- provider-neutral recorded/historical market-data ingestion
-- explicit event timestamps/provenance
-- configurable exchange/session calendar boundaries
-- session-aware multi-timeframe candles
-- deterministic technical/price-action/SMC primitives
-- replay-compatible interfaces
-- data-quality gates
-
-### Already validated in this phase
+### Quant foundation already validated
 
 - canonical instrument master/provider identifiers
 - quote-quality validation
 - configurable trading sessions
 - session-anchored multi-timeframe candles
 - SMA/EMA/RSI/ATR/VWAP
-- confirmed swing detection with explicit confirmation timing
-- deterministic structure-break detection
-- deterministic three-candle FVG detection using closed candles only
+- confirmed swing and structure-break detection
+- trend state with BOS continuation and CHoCH transition semantics
+- three-candle FVG detection and open/partial/filled/invalidated lifecycle
+- reusable deterministic replay strategy pipeline
 
-### Immediate engineering gates
+### Current objective
+
+Build the first minimal event-driven backtesting layer on top of the same replay/strategy/decision/risk contracts already used by paper execution.
+
+The backtester must explicitly model its assumptions rather than silently granting ideal fills. Initial scope should include:
+
+- replay-driven chronological processing
+- deterministic strategy decisions from closed candles only
+- independent risk approval/rejection
+- explicit market-fill model
+- spread/slippage and fee hooks with safe zero defaults only when clearly configured
+- positions, realized/unrealized P&L and equity progression
+- deterministic repeatability tests
+- no-look-ahead regression tests
+
+### Engineering gates
 
 Every addition must keep `main` green across:
 
 - Ruff
 - strict MyPy
-- migrations against PostgreSQL when schema changes
-- unit/integration tests
+- PostgreSQL migrations when schema changes
+- full unit/integration tests
 - Bandit
 - migration rollback/reapply
 - Docker build
 
-### Next vertical work
+### After the minimal backtester
 
-Recorded market events → normalization/data-quality → replay clock/event stream → candles/features → strategy/decision/risk → existing durable paper path.
+1. Add deterministic regime primitives.
+2. Expand SMC only with explicit/testable availability and invalidation semantics.
+3. Strengthen failure injection and operational health gating.
+4. Introduce provider-neutral read-only historical adapters after verifying current official provider APIs.
+5. Keep all real broker order submission disabled until live-trading safety gates are complete and explicitly approved.
 
-In parallel, extend market structure conservatively: CHoCH/MSS/FVG lifecycle only after their deterministic availability and invalidation semantics are explicitly encoded and tested.
-
-### Explicitly out of scope for this phase
+### Explicitly out of scope for the current phase
 
 - unrestricted live order placement
 - real broker order submission
@@ -64,4 +70,4 @@ In parallel, extend market structure conservatively: CHoCH/MSS/FVG lifecycle onl
 
 ### Safety invariant
 
-Live trading remains disabled. No broker adapter may bypass data-quality, decision, risk, OMS, audit or reconciliation controls.
+Live trading remains disabled. No future broker adapter may bypass data-quality, decision, independent risk, OMS, audit, reconciliation or persisted operational controls.
