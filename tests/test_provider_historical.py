@@ -188,14 +188,12 @@ async def test_dhan_intraday_request_and_90_day_limit() -> None:
             )
 
 
-def test_provider_clients_reject_empty_tokens() -> None:
-    http = httpx.AsyncClient()
-    try:
+async def test_provider_clients_reject_empty_tokens() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         with pytest.raises(ValueError, match="access_token"):
             UpstoxHistoricalClient(access_token=" ", http_client=http)
         with pytest.raises(ValueError, match="access_token"):
             DhanHistoricalClient(access_token=" ", http_client=http)
-    finally:
-        import asyncio
-
-        asyncio.run(http.aclose())
