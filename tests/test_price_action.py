@@ -73,7 +73,7 @@ def test_structure_break_can_only_occur_after_swing_confirmation() -> None:
         candle(0, high="10", low="8", close="9"),
         candle(1, high="12", low="9", close="11"),
         candle(2, high="15", low="10", close="14"),
-        candle(3, high="16", low="11", close="16"),
+        candle(3, high="14", low="11", close="13"),
         candle(4, high="12", low="9", close="10"),
         candle(5, high="17", low="12", close="16"),
     ]
