@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 
+from trading_platform.decision import decide
 from trading_platform.oms import OrderManagementSystem, OrderState
 from trading_platform.paper import PaperBroker
 from trading_platform.risk import RiskDecisionType, RiskEngine, RiskLimits, build_approved_intent
@@ -26,9 +27,24 @@ def test_risk_rejects_order_above_limit() -> None:
             max_position_notional=Decimal("1000"),
         )
     )
-    decision = engine.evaluate(signal(), requested_quantity=6)
-    assert decision.decision is RiskDecisionType.REJECT
-    assert decision.reason == "MAX_ORDER_NOTIONAL"
+    trading_decision = decide(signal())
+    risk_decision = engine.evaluate(trading_decision, requested_quantity=6)
+    assert risk_decision.decision is RiskDecisionType.REJECT
+    assert risk_decision.reason == "MAX_ORDER_NOTIONAL"
+
+
+def test_non_directional_decision_is_rejected() -> None:
+    engine = RiskEngine(
+        RiskLimits(
+            max_order_notional=Decimal("1000"),
+            max_position_notional=Decimal("1000"),
+        )
+    )
+    trading_decision = decide(signal(SignalDirection.FLAT))
+    risk_decision = engine.evaluate(trading_decision, requested_quantity=1)
+
+    assert risk_decision.decision is RiskDecisionType.REJECT
+    assert risk_decision.reason == "NO_DIRECTIONAL_DECISION"
 
 
 def test_rejected_risk_cannot_create_order_intent() -> None:
@@ -38,21 +54,23 @@ def test_rejected_risk_cannot_create_order_intent() -> None:
             max_position_notional=Decimal("1000"),
         )
     )
-    decision = engine.evaluate(signal(), requested_quantity=1)
+    trading_decision = decide(signal())
+    risk_decision = engine.evaluate(trading_decision, requested_quantity=1)
     with pytest.raises(ValueError, match="risk approval"):
-        build_approved_intent(signal(), decision)
+        build_approved_intent(trading_decision, risk_decision)
 
 
 def test_duplicate_fill_is_idempotent_and_does_not_duplicate_position() -> None:
     trading_signal = signal()
+    trading_decision = decide(trading_signal)
     engine = RiskEngine(
         RiskLimits(
             max_order_notional=Decimal("1000"),
             max_position_notional=Decimal("2000"),
         )
     )
-    decision = engine.evaluate(trading_signal, requested_quantity=5)
-    intent = build_approved_intent(trading_signal, decision)
+    risk_decision = engine.evaluate(trading_decision, requested_quantity=5)
+    intent = build_approved_intent(trading_decision, risk_decision)
 
     oms = OrderManagementSystem()
     order = oms.create(intent)
@@ -71,6 +89,7 @@ def test_duplicate_fill_is_idempotent_and_does_not_duplicate_position() -> None:
 
 def test_fill_cannot_exceed_order_quantity() -> None:
     trading_signal = signal()
+    trading_decision = decide(trading_signal)
     engine = RiskEngine(
         RiskLimits(
             max_order_notional=Decimal("1000"),
@@ -78,8 +97,8 @@ def test_fill_cannot_exceed_order_quantity() -> None:
         )
     )
     intent = build_approved_intent(
-        trading_signal,
-        engine.evaluate(trading_signal, requested_quantity=2),
+        trading_decision,
+        engine.evaluate(trading_decision, requested_quantity=2),
     )
     order = OrderManagementSystem().create(intent)
     order.submit()
