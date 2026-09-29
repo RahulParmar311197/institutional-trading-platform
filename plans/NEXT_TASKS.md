@@ -2,39 +2,43 @@
 
 Tasks are ordered by engineering risk. Do not skip validation to work on optional features.
 
-## P0 — Get `main` green
+## P0 — Keep infrastructure evidence complete
 
-1. Resolve all Ruff failures.
-2. Resolve all MyPy failures without weakening strict typing.
-3. Resolve all Pytest failures without weakening valid tests.
-4. Resolve Bandit findings by root cause.
-5. Confirm Docker image builds in CI.
-6. Add migration apply/rollback integration validation against PostgreSQL.
-7. Add structured logging/request correlation that is actually exercised.
-8. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with CI evidence.
+1. Add a real Redis integration test for readiness/connectivity.
+2. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip and Docker green on every `main` change.
+3. Add focused failure tests for DB/Redis unavailability and transaction rollback where not already covered.
+4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual CI evidence.
 
-## P1 — Complete first paper-trading vertical slice
+## P1 — Provider-neutral market data and replay
 
-1. Add explicit decision contract between strategy and risk.
-2. Persist order intents, OMS orders, order events and fills.
-3. Add deterministic paper realized/unrealized P&L.
-4. Add reconciliation between internal OMS/fills/positions and paper-broker truth.
-5. Add journal/audit records for signal → risk → order → fill → position.
-6. Add E2E test proving one paper trade through the full path.
-7. Add restart/idempotency tests for duplicate fills and recovered open orders.
+1. Define canonical recorded market-event envelopes with source/exchange/provider/ingestion timestamps and sequence metadata.
+2. Add historical/recorded event ingestion from local fixtures/Parquet-compatible boundaries without pretending it is live data.
+3. Add normalization and duplicate/out-of-order handling before candle generation.
+4. Implement a deterministic replay clock/event stream with pause/step/speed-independent event ordering.
+5. Feed replayed events through the existing data-quality → candle/features → strategy/decision/risk → durable paper path.
+6. Add E2E replay test proving identical deterministic results across repeated runs.
 
-## P2 — Quant expansion after vertical slice is green
+## P2 — Deterministic quant/SMC expansion
 
-1. Complete multi-timeframe candle aggregation/session boundaries.
-2. Add ATR/ADX/VWAP and regression/reference tests.
-3. Add deterministic swing/market-structure primitives.
-4. Add BOS/CHoCH/FVG only with explicit no-look-ahead definitions and tests.
-5. Add regime engine and scanner only after feature primitives are stable.
+1. Define explicit trend-state rules from confirmed swings/structure breaks.
+2. Add CHoCH/MSS semantics only after availability timing is specified and tested.
+3. Add FVG lifecycle: open, partial mitigation, filled and invalidated using only information available at each timestamp.
+4. Add additional indicators such as ADX only with trusted reference/regression tests.
+5. Add regime primitives after structure semantics stabilize.
+6. Add scanner only after feature outputs are versioned/stable.
+
+## P3 — Trading safety before external brokers
+
+1. Add global/account/strategy/instrument kill-switch primitives.
+2. Add close-only/read-only/halted operational modes.
+3. Persist/recover active risk locks.
+4. Expand failure injection: DB loss, Redis loss, duplicate/out-of-order events, transaction failure and restart.
+5. Only then begin Upstox/Dhan adapters in read-only/shadow-safe mode.
 
 ## Later
 
-- event-driven backtester/replay
-- Upstox/Dhan adapters in safe/shadow mode
+- event-driven backtester built on replay interfaces
+- advanced validation/walk-forward/Monte Carlo
 - options engine
 - frontend workspaces
 - ML subsystem
@@ -42,9 +46,10 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 
 ## Constraints
 
-- Work directly on `main`; do not create branches/PRs for this project unless the user changes that instruction.
+- Work directly on `main`; do not create branches/PRs unless the user changes that instruction.
 - Live execution remains disabled.
 - No hardcoded success responses representing real integrations.
 - No secrets in the repository.
 - No broad placeholder package generation.
 - A capability remains unverified until its required checks actually pass.
+- Recorded/mock/fixture data must be clearly labeled and never represented as live market data.
