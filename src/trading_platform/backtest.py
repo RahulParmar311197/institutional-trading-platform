@@ -19,8 +19,8 @@ class ExecutionAssumptions:
     fee_per_filled_order: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
-        if self.slippage_bps < 0:
-            raise ValueError("slippage_bps must be non-negative")
+        if self.slippage_bps < 0 or self.slippage_bps >= BASIS_POINTS:
+            raise ValueError("slippage_bps must be in [0, 10000)")
         if self.fee_per_filled_order < 0:
             raise ValueError("fee_per_filled_order must be non-negative")
 
