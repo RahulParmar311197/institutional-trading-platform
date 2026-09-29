@@ -48,7 +48,11 @@ class RiskEngine:
         if order_notional > self.limits.max_order_notional:
             return RiskDecision(RiskDecisionType.REJECT, "MAX_ORDER_NOTIONAL", 0)
 
-        signed_request = requested_quantity if signal.direction is SignalDirection.LONG else -requested_quantity
+        signed_request = (
+            requested_quantity
+            if signal.direction is SignalDirection.LONG
+            else -requested_quantity
+        )
         projected_quantity = current_position_quantity + signed_request
         projected_notional = abs(Decimal(projected_quantity) * signal.price)
         if projected_notional > self.limits.max_position_notional:
