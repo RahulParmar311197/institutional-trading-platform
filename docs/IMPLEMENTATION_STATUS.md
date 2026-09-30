@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36704443934` completed successfully |
+| CI | TESTED | cumulative `main` run `36705503807` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -91,7 +91,7 @@ This file is the source of truth for implementation status. Generated code alone
 | OOS evaluation/provenance | TESTED | versioned provenance/result envelopes bind boundary, fold/spec, strategy, ordered feature IDs, normalized stream digest, backtest config digest, execution costs and full deterministic backtest result identity; no selection/optimization is performed |
 | Fixed-strategy OOS fold evaluation | TESTED | cold-start evaluator accepts only events inside the half-open test window, rejects train/out-of-window leakage instead of filtering it, runs a fixed strategy/configuration and emits deterministic OOS provenance/result envelopes |
 | Sharpe/Sortino/annualized metrics | TESTED | requires explicit `periods_per_year`; Sharpe uses arithmetic mean excess return over sample standard deviation; Sortino uses arithmetic mean above target over population lower-partial-moment downside deviation; zero denominator returns `None` |
-| Walk-forward aggregate reporting | NOT_STARTED | aggregate semantics remain pending; per-fold provenance is now immutable/tested |
+| Walk-forward aggregate reporting | TESTED | ordered contiguous fold results require compatible boundary/spec/strategy/features/config/execution assumptions; report identity is UTC-canonical and immutable; summaries remain fold-level and use arithmetic mean fold return without summing/compounding potentially overlapping folds |
 | Walk-forward optimization/Monte Carlo | NOT_STARTED | later phase; build only on explicit provenance and leakage protections |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
 | Durable order/fill persistence | TESTED | decision linkage, deduplication, persistence and recovery |
@@ -101,24 +101,24 @@ This file is the source of truth for implementation status. Generated code alone
 | Journal/audit | TESTED | append-only journal behavior and idempotent AuditEvent persistence |
 | Independent risk engine | TESTED | TradingDecision-only path, notional gates and operational controls |
 | Kill switches | TESTED | global/account/strategy/instrument locks and READ_ONLY/CLOSE_ONLY/HALTED semantics |
-| Persistent risk controls | TESTED | migration `0007` establishes the singleton operational-state initialization invariant; mode/locks persist and recover, missing singleton state and malformed persisted lock storage keys fail closed |
+| Persistent risk controls | TESTED | migration `0007` establishes the singleton operational-state initialization invariant; all load/mutation paths require it; missing singleton, invalid mode/scope, malformed lock keys and database unavailability fail closed |
 | Operational health gate | TESTED | missing/critical-unavailable health halts; degraded/noncritical unavailable forces READ_ONLY |
 | Persisted health escalation | TESTED | health-driven restriction persists; persistence failure retains restrictive in-memory mode; healthy state never auto-relaxes operator controls |
 | Live-trading gate policy | TESTED | deny-by-default policy requires explicit approval, authorization, broker auth, reconciliation, strategy/capital approval, healthy subsystems and normal unlocked controls |
 | Reconciliation | TESTED | position quantity/average-price match/mismatch behavior |
-| Restart recovery | TESTED | OMS state, processed fills, paper position and risk controls reconstruct from PostgreSQL; missing/corrupt persisted operational control state fails closed |
+| Restart recovery | TESTED | OMS state, processed fills, paper position and risk controls reconstruct from PostgreSQL; missing/corrupt/unavailable persisted operational-control state fails closed |
 | Real broker order adapter | NOT_STARTED | no order-submission API exists |
 | Real execution/reconciliation | NOT_STARTED | paper path only |
 | Options engine | NOT_STARTED | later phase |
 | ML subsystem | NOT_STARTED | later phase |
 | Next.js frontend | NOT_STARTED | later phase |
 | Paper E2E workflow | TESTED | decision → risk → OMS → paper fill → position → reconciliation plus replay→durable-paper |
-| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay/backtest checkpoint integrity/atomicity, persisted control corruption and health-escalation cases covered; broader fault matrix pending |
+| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable execution/control recovery, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay/backtest checkpoint integrity/atomicity, persisted control corruption and health-escalation cases covered; broader fault matrix pending |
 | Controlled live release | NOT_STARTED | live remains disabled and is not approved |
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `dda5b7b5be5ba8289d17a2c7aa9952282516029b` in GitHub Actions run `36704443934`.
+A green cumulative `main` CI run completed for commit `f42749bbc88d18d213d12db3bf5c3991a8437f9c` in GitHub Actions run `36705503807`.
 
 The run passed in one workflow:
 
@@ -140,8 +140,8 @@ Validated additions in the current cumulative scope include:
 - versioned OOS provenance/result identities binding dataset boundary, fold/spec, strategy ID, ordered feature IDs, normalized stream, backtest configuration and explicit execution costs
 - explicit sample-standard-deviation Sharpe and population lower-partial-moment Sortino with mandatory explicit annualization metadata
 - fixed-strategy cold-start OOS fold evaluation that rejects accidental train/out-of-window event leakage and produces deterministic provenance/result IDs
-- migration-backed persistent control initialization: existing state is preserved, absent first-run state is seeded as `NORMAL`, and a missing singleton after migration fails closed
-- persisted risk-control recovery rejects invalid global/non-global storage-key encodings instead of converting malformed records into active domain locks
+- fold-level immutable walk-forward reports with compatibility/order checks and UTC-canonical report identity; overlapping test windows are not compounded or summed into a synthetic portfolio path
+- migration-backed persistent control initialization plus fail-closed missing state, invalid mode/scope, malformed lock-key and database-unavailable load/mutation coverage
 - previously validated full-state checkpoint/resume, immutable strategy registry, provider classification/master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
 ## Important validation boundaries
@@ -156,7 +156,8 @@ Validated additions in the current cumulative scope include:
 - Interrupted-write coverage is deliberate fault injection around atomic replace, not a claim of exhaustive power-loss/filesystem-crash validation.
 - Versioned regime output is the first concrete derived-feature contract; no generic feature registry or universal schema is claimed.
 - OOS provenance/result contracts and fixed-strategy fold evaluation do not perform training, warm-starting, parameter search, optimizer ranking, statistical significance testing or profitability validation.
-- The first OOS evaluator is deliberately cold-start/test-only. Warm-up or fitted-state transfer across a fold boundary requires a separate explicit state/provenance contract and is not implied.
+- The current OOS evaluator is deliberately cold-start/test-only. Warm-up or fitted-state transfer across a fold boundary requires a separate explicit state/provenance contract and is not implied.
+- Walk-forward aggregate reports are fold-level summaries. Because generated folds may have overlapping test windows when `step < test_length`, the report deliberately does not sum trades/P&L or compound fold returns into a single path.
 - Sharpe/Sortino use the explicitly documented repository conventions only; no claim is made that those conventions are uniquely correct for every research use case.
 - Walk-forward folds are rolling fixed-length construction; expanding-window or purged-cross-validation semantics are not claimed.
 - Migration `0007` is a data-initialization migration; its downgrade intentionally does not delete persisted operational state because deleting an operator-modified safety mode would be an unsafe data-loss side effect. Downgrade-to-base still removes the owning table at migration `0005`.
@@ -167,9 +168,9 @@ Validated additions in the current cumulative scope include:
 
 ## Highest-priority work
 
-1. Continue persistence/network/provider fault injection around recovery/control transitions now that persisted operational-state initialization versus corruption is explicit; add malformed mode/scope and load/unavailable-database cases where they add distinct coverage.
-2. Add aggregate walk-forward reporting only with explicit compatibility/order semantics over immutable per-fold OOS result identities; do not introduce ranking or optimization.
-3. Define any warm-up/fitted-state transfer contract before allowing training-window-derived state into OOS evaluation.
+1. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains untested; avoid redundant synthetic cases now that persisted-control missing/corrupt/unavailable paths are covered.
+2. Define warm-up/fitted-state provenance before allowing any training-window-derived state into OOS evaluation; keep the current evaluator cold-start until that contract exists.
+3. Define a separate selection/validation contract before any optimizer or parameter search so test-fold outcomes cannot influence their own evaluated configuration.
 4. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
 5. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
 6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
