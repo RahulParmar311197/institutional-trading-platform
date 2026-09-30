@@ -24,13 +24,13 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation that rejects train/out-of-window event leakage, and fold-level aggregate reporting with strict provenance compatibility/order checks. Aggregate reports deliberately do not sum or compound potentially overlapping test folds.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, and selection-bound OOS evaluation. Validation and test windows are kept separate and candidate identity binds strategy/features/backtest configuration before test evaluation.
 
 Next:
 
-1. Define warm-up/fitted-state provenance before allowing any training-window-derived state into OOS evaluation. The current evaluator is intentionally cold-start/test-only.
-2. Define a separate selection/validation contract before optimizer/parameter search; a test fold must never choose or influence the configuration evaluated on itself.
-3. Keep training/test data isolation explicit across any future warm-start or selection workflow.
+1. Define a typed strategy/feature state export-import boundary before applying warm-up or fitted state during validation/OOS execution. The provenance contract exists, but no state restoration/application path is implemented yet.
+2. Extend selected-OOS aggregate reporting only if it preserves each fold's selection-decision identity and does not synthesize a path across overlapping test folds.
+3. Add parameter-grid/search orchestration only on top of the validated fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
 4. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
 5. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
@@ -57,7 +57,8 @@ Next:
 
 ## Later
 
-- walk-forward optimization/parameter search after leakage-safe warm-up/selection contracts
+- warm-start/fitted-state execution after a typed state import/export contract
+- parameter-grid/search orchestration after the validated selection boundary
 - Monte Carlo
 - distributed research orchestration when justified by workload
 - options engine
