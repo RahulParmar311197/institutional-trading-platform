@@ -28,6 +28,10 @@ class HistoricalBar:
             raise ValueError("OHLC prices must be positive")
         if self.high < self.low:
             raise ValueError("high must be greater than or equal to low")
+        if self.open > self.high or self.close > self.high:
+            raise ValueError("open and close must not exceed high")
+        if self.open < self.low or self.close < self.low:
+            raise ValueError("open and close must not be below low")
         if self.volume < 0:
             raise ValueError("volume must be non-negative")
         if self.open_interest is not None and self.open_interest < 0:
