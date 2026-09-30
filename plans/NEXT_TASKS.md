@@ -24,17 +24,15 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, combined selected+warm OOS execution, and deterministic explicit-candidate validation search. Pending source-window candles are excluded from warm transfer; validation search accepts validation-window evidence only and produces stable candidate-set/search identities.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, combined selected+warm OOS execution, deterministic explicit-candidate validation search, deterministic EMA parameter-grid materialization, multi-fold validation-grid search, grid/search-bound selected+warm OOS execution, and fold-level grid OOS reporting. Pending source-window candles are excluded from warm transfer; validation/grid search accepts validation-window evidence only; test-fold results never participate in candidate ranking; grid OOS reports preserve grid/search/decision/candidate/preparation/result identities without synthesizing a cross-fold portfolio path.
 
 Next:
 
-1. Add an explicit deterministic parameter-grid specification/generator that materializes immutable candidate configurations before validation begins.
-2. Add multi-fold search orchestration that runs the same declared candidate grid through each fold's fit/validation boundary without using any test-fold outcome for ranking.
-3. Preserve candidate-set/grid/search identities through selected+warm OOS reporting so research results can be traced back to the exact pre-test search evidence.
-4. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
-5. Extend selected/warm OOS aggregate reporting only if it preserves each fold's decision/preparation identities and does not synthesize a path across overlapping test folds.
-6. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
-7. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
+1. Add automatic fold dataset slicing/orchestration only if it preserves explicit half-open train/validation/test boundaries and fails closed on missing, duplicate or out-of-window evidence rather than silently filtering it.
+2. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
+3. Define Monte Carlo semantics before implementation: sampling unit, replacement policy, deterministic seed, path count and which temporal/dependency relationships must remain intact.
+4. Generalize parameter-grid orchestration beyond EMA only when a second concrete parameterized strategy requires it; do not build a generic optimizer abstraction prematurely.
+5. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
 ## P3 — Deterministic SMC / strategy evolution
 
@@ -60,7 +58,8 @@ Next:
 ## Later
 
 - generic fitted/model-state execution when a concrete stateful component requires it
-- Monte Carlo
+- Monte Carlo after explicit resampling semantics
+- generic parameter-grid abstractions only when multiple real strategies justify them
 - distributed research orchestration when justified by workload
 - options engine
 - portfolio construction/optimization expansion
