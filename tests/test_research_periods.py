@@ -6,6 +6,8 @@ from trading_platform.research_periods import (
     DatasetPartition,
     ResearchDatasetBoundaries,
     ResearchWindow,
+    WalkForwardSpec,
+    generate_walk_forward_folds,
 )
 
 BASE = datetime(2026, 1, 1, tzinfo=UTC)
@@ -89,3 +91,98 @@ def test_research_windows_require_timezone_aware_valid_ranges() -> None:
 def test_research_boundary_version_is_explicit() -> None:
     with pytest.raises(ValueError, match="unsupported"):
         ResearchDatasetBoundaries(train=window(0, 10), test=window(10, 20), version=2)
+
+
+def test_walk_forward_folds_are_rolling_half_open_and_deterministic() -> None:
+    spec = WalkForwardSpec(
+        train_length=timedelta(days=10),
+        test_length=timedelta(days=2),
+        step=timedelta(days=2),
+    )
+
+    folds = generate_walk_forward_folds(window(0, 16), spec=spec)
+
+    assert len(folds) == 3
+    assert [(fold.train.start, fold.train.end) for fold in folds] == [
+        (BASE, BASE + timedelta(days=10)),
+        (BASE + timedelta(days=2), BASE + timedelta(days=12)),
+        (BASE + timedelta(days=4), BASE + timedelta(days=14)),
+    ]
+    assert [(fold.test.start, fold.test.end) for fold in folds] == [
+        (BASE + timedelta(days=10), BASE + timedelta(days=12)),
+        (BASE + timedelta(days=12), BASE + timedelta(days=14)),
+        (BASE + timedelta(days=14), BASE + timedelta(days=16)),
+    ]
+    assert [fold.index for fold in folds] == [0, 1, 2]
+    assert {fold.spec_id for fold in folds} == {spec.spec_id}
+
+
+def test_walk_forward_embargo_separates_training_and_test_data() -> None:
+    spec = WalkForwardSpec(
+        train_length=timedelta(days=5),
+        test_length=timedelta(days=2),
+        step=timedelta(days=2),
+        embargo=timedelta(days=1),
+    )
+
+    folds = generate_walk_forward_folds(window(0, 10), spec=spec)
+
+    assert len(folds) == 2
+    assert folds[0].train.end == BASE + timedelta(days=5)
+    assert folds[0].test.start == BASE + timedelta(days=6)
+    assert folds[0].test.end == BASE + timedelta(days=8)
+    assert folds[1].train.start == BASE + timedelta(days=2)
+    assert folds[1].test.end == BASE + timedelta(days=10)
+
+
+def test_walk_forward_does_not_emit_truncated_final_fold() -> None:
+    spec = WalkForwardSpec(
+        train_length=timedelta(days=5),
+        test_length=timedelta(days=3),
+        step=timedelta(days=3),
+    )
+
+    folds = generate_walk_forward_folds(window(0, 10), spec=spec)
+
+    assert len(folds) == 1
+    assert folds[0].test.end == BASE + timedelta(days=8)
+
+
+def test_walk_forward_spec_identity_and_validation_are_explicit() -> None:
+    spec = WalkForwardSpec(
+        train_length=timedelta(days=5),
+        test_length=timedelta(days=2),
+        step=timedelta(days=1),
+        embargo=timedelta(hours=12),
+    )
+
+    assert spec.spec_id == (
+        "walk_forward_v1_train432000000000_test172800000000_"
+        "step86400000000_embargo43200000000"
+    )
+
+    with pytest.raises(ValueError, match="train_length"):
+        WalkForwardSpec(
+            train_length=timedelta(0),
+            test_length=timedelta(days=1),
+            step=timedelta(days=1),
+        )
+    with pytest.raises(ValueError, match="test_length"):
+        WalkForwardSpec(
+            train_length=timedelta(days=1),
+            test_length=timedelta(0),
+            step=timedelta(days=1),
+        )
+    with pytest.raises(ValueError, match="step"):
+        WalkForwardSpec(
+            train_length=timedelta(days=1),
+            test_length=timedelta(days=1),
+            step=timedelta(0),
+        )
+    with pytest.raises(ValueError, match="embargo"):
+        WalkForwardSpec(
+            train_length=timedelta(days=1),
+            test_length=timedelta(days=1),
+            step=timedelta(days=1),
+            embargo=-timedelta(seconds=1),
+        )
