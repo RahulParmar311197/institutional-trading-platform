@@ -29,14 +29,15 @@ This file is the source of truth for implementation status. Generated code alone
 |---|---|---|
 | Python/FastAPI foundation | TESTED | Ruff, strict MyPy, Pytest, Bandit and Docker pass on `main` |
 | Typed configuration | TESTED | live trading defaults off; enabling outside LIVE is rejected |
-| PostgreSQL/SQLAlchemy/Alembic | TESTED | migrations 0001-0005 apply, downgrade to base and reapply against PostgreSQL |
+| PostgreSQL/SQLAlchemy/Alembic | TESTED | migrations 0001-0006 apply, downgrade to base and reapply against PostgreSQL |
 | Redis | TESTED | real Redis readiness integration coverage in CI |
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36694395696` completed successfully |
+| CI | TESTED | cumulative `main` run `36695212185` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
-| Provider identifier resolver | TESTED | point-in-time and full-range provider IDs resolve deterministically; missing, overlapping and rollover-crossing mappings fail closed |
+| Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
+| Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
 | Recorded market events | TESTED | provider-neutral recorded trade envelope, timestamps, ordering, dedupe/conflict checks |
 | Recorded JSONL ingestion | TESTED | Decimal/timestamp round-trip, normalization and malformed-input rejection |
 | Provider-neutral historical source | TESTED | local JSONL source, filtering and multi-source normalization |
@@ -45,9 +46,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Historical provider normalization | TESTED | provider OHLCV bars convert to canonical closed candles without inventing trades |
 | Upstox historical read-only client | TESTED | V3 request shape represented; exact URL/auth/header/response behavior covered with `httpx.MockTransport` only |
 | Canonical Upstox historical service | TESTED | canonical instrument→full-range provider ID→read-only client path tested; rollover-crossing range rejected before HTTP |
-| Dhan historical read-only client | TESTED | v2 daily/intraday request/response shapes represented and covered with `httpx.MockTransport` only |
-| Canonical Dhan daily cash service | TESTED | canonical NSE/BSE cash instrument→full-range Dhan security ID→`NSE_EQ`/`BSE_EQ` + `EQUITY`→daily read-only client; rollover and unsupported derivatives fail before HTTP |
-| Dhan derivatives canonical mapping | NOT_STARTED | canonical model does not yet carry enough provider-specific instrument classification; no guessing is allowed |
+| Dhan historical read-only client | TESTED | v2 daily/intraday request/response shapes represented; daily expiry code restricted to documented 0/1/2; covered with `httpx.MockTransport` only |
+| Canonical Dhan daily cash service | TESTED | canonical NSE/BSE cash instrument→full-range Dhan security ID→`NSE_EQ`/`BSE_EQ` + `EQUITY`→daily read-only client; rollover fails before HTTP |
+| Canonical Dhan daily derivatives | TESTED | FUTIDX/FUTSTK/OPTIDX/OPTSTK require explicit persisted `NSE_FNO`/`BSE_FNO`, instrument type and expiry code; missing/mismatched metadata fails before HTTP |
 | Authenticated external historical ingestion | IN_PROGRESS | client/service contracts exist; no real credentialed provider call has been claimed or validated |
 | Historical read retry policy | TESTED | bounded retry for transport errors and transient HTTP statuses; auth/client errors do not retry |
 | Live market data | NOT_STARTED | provider WebSocket ingestion pending |
@@ -95,36 +96,38 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `99b37b12aeb898b5d46a723c7586213f441d129e` in GitHub Actions run `36694395696`.
+A green cumulative `main` CI run completed for commit `a61ba801bb25ab414267c570479f2a1e20e3e6a9` in GitHub Actions run `36695212185`.
 
 The run passed, in one workflow:
 
 - dependency installation
 - Ruff
 - strict MyPy
-- PostgreSQL migrations through `0005`
+- PostgreSQL migrations through `0006`
 - full Pytest suite including PostgreSQL and Redis integration tests
 - Bandit
 - Alembic downgrade-to-base and reapply-to-head
 - Docker image build
 - runtime-only package smoke imports
 
-Validated additions in this milestone include:
+Validated additions in this turn include:
 
 - canonical Dhan daily cash service for explicit NSE/BSE cash classifications, with real PostgreSQL identifier resolution and mocked provider HTTP
-- Dhan identifier-rollover and derivative-classification fail-closed behavior before HTTP
-- deterministic replay checkpoint/resume bound to the normalized event stream
-- strict versioned JSON checkpoint serialization and malformed/future/mismatched state rejection
+- explicit provider classification metadata on instrument identifiers via migration `0006`
+- canonical Dhan daily derivative routing for FUTIDX/FUTSTK/OPTIDX/OPTSTK only when persisted provider exchange segment, instrument type and expiry code are present and consistent
+- Dhan rollover, classification-mismatch and invalid-expiry-code rejection before network I/O
+- deterministic replay checkpoint/resume bound to normalized event content plus strict versioned JSON serialization
 - duplicate provider candle timestamp rejection for Upstox and Dhan
-- versioned EMA crossover strategy identity (`ema_crossover_v1_<fast>_<slow>`) carried through the existing `strategy_id` contract without a schema migration
+- versioned EMA crossover strategy identity (`ema_crossover_v1_<fast>_<slow>`) carried through the existing `strategy_id` contract without a strategy-storage migration
 
 The previously validated research/paper/safety capabilities remain covered by the same cumulative run.
 
 ## Important validation boundaries
 
 - Provider HTTP contract/service tests are mocked. They do **not** prove current credentials, entitlements, provider availability or end-to-end authenticated data retrieval.
-- Canonical Upstox and Dhan services are integration-tested against PostgreSQL plus mocked HTTP, not real provider accounts.
-- The canonical Dhan service currently supports daily NSE/BSE cash equities only. Futures/options are deliberately rejected until explicit canonical/provider instrument classification exists.
+- Canonical Upstox/Dhan services are integration-tested against PostgreSQL plus mocked HTTP, not real provider accounts.
+- Dhan derivative support here is classification/routing for the standard daily historical endpoint, not expired-options analytics or live derivatives execution.
+- Provider classification metadata must come from verified provider instrument-master ingestion or explicit trusted configuration; the platform does not infer FUTIDX vs FUTSTK or OPTIDX vs OPTSTK.
 - Replay checkpoints are serializable/restart-safe state objects; no external checkpoint store or distributed job runner is claimed.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
@@ -134,7 +137,7 @@ The previously validated research/paper/safety capabilities remain covered by th
 ## Highest-priority work
 
 1. Add optional authenticated read-only provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
-2. Define explicit provider instrument-classification metadata before enabling canonical Dhan futures/options or other ambiguous classifications; do not infer them from insufficient fields.
+2. Add verified provider instrument-master ingestion so Dhan classification metadata can be populated from provider evidence instead of hand-authored test fixtures.
 3. Extend checkpoint/resume from replay-stream state into long-running replay/backtest orchestration only where durable continuation is actually needed.
 4. Add broader feature/strategy output versioning and registry/lifecycle semantics before scanner work.
 5. Continue SMC only with objective/testable liquidity concepts; add walk-forward/OOS only after dataset boundaries and period semantics are explicit.
@@ -142,4 +145,4 @@ The previously validated research/paper/safety capabilities remain covered by th
 
 ## Blockers
 
-No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. Dhan derivatives require explicit canonical/provider classification metadata before implementation. Live trading remains deliberately unavailable and no broker order execution has been introduced.
+No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. Provider-master ingestion for real Dhan classification requires consuming verified provider instrument-list data. Live trading remains deliberately unavailable and no broker order execution has been introduced.
