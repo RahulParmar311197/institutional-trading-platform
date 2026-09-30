@@ -22,9 +22,10 @@ Research restartability and reproducibility now include:
 - deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs;
 - OOS provenance/result identities binding boundary, fold/spec, strategy, features, normalized stream, backtest configuration and execution assumptions;
 - explicit Sharpe/Sortino conventions with mandatory `periods_per_year`;
-- fixed-strategy cold-start OOS fold evaluation that rejects any train/out-of-window event rather than silently filtering it.
+- fixed-strategy cold-start OOS fold evaluation that rejects any train/out-of-window event rather than silently filtering it;
+- immutable fold-level aggregate reporting with compatibility/order validation and UTC-canonical report identity; overlapping folds are never compounded into a synthetic portfolio path.
 
-Persistent control recovery now has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. After migration, a missing singleton is treated as corruption: load and mode updates fail closed. Persisted global/non-global risk-lock storage-key encodings are also validated and malformed rows are rejected.
+Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
 ### Safety controls already validated
 
@@ -33,7 +34,7 @@ Persistent control recovery now has an explicit initialization contract. Migrati
 - global/account/strategy/instrument kill switches
 - READ_ONLY/CLOSE_ONLY/HALTED operational modes
 - migration-backed persistence/recovery of operational mode and risk locks
-- missing/corrupt persisted operational control state fails closed
+- missing/corrupt/unavailable persisted operational control state fails closed before load/mutation succeeds
 - health-driven restrictions persist and healthy state never auto-relaxes operator controls
 - transactional rollback/no in-memory economic publication on duplicate fill, audit failure or unavailable database
 - bounded transient-only provider retries; auth/client failures are not retried
@@ -53,16 +54,17 @@ Persistent control recovery now has an explicit initialization contract. Migrati
 - versioned dataset, return-period, walk-forward fold and OOS-result provenance contracts
 - fixed-strategy cold-start OOS evaluation
 - explicit Sharpe/Sortino calculations
+- fold-level walk-forward aggregate reports without cross-fold path compounding
 
 ### Current objective
 
-Continue failure hardening and build leakage-safe research reporting on immutable per-fold results. Keep provider validation claims distinct from mocked integrations and preserve all live-trading safety boundaries.
+Continue failure hardening only where a distinct fail-closed invariant is missing, and deepen leakage-safe research semantics beyond cold-start fold evaluation. Keep provider validation claims distinct from mocked integrations and preserve all live-trading safety boundaries.
 
 Immediate work:
 
-1. Continue persistence/network/provider fault injection around recovery/control-state transitions, including malformed persisted mode/scope and unavailable-database recovery cases where coverage is distinct.
-2. Add aggregate walk-forward reporting only after explicit compatibility/order semantics are defined over immutable per-fold result identities; do not rank/select strategies.
-3. Define an explicit warm-up/fitted-state transfer contract before allowing training-window-derived state into OOS evaluation.
+1. Define explicit warm-up/fitted-state provenance before allowing training-window-derived state into OOS evaluation; the current evaluator stays cold-start until that boundary exists.
+2. Define a separate selection/validation contract before any optimizer or parameter search so test-fold outcomes cannot influence their own evaluated configuration.
+3. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
 4. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 5. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
 
@@ -74,7 +76,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 
 - unrestricted live order placement or any real broker order submission
 - broker credentials in source control
-- optimizer-driven parameter selection/ranking before leakage-safe evaluation/aggregation semantics exist
+- optimizer-driven parameter selection/ranking before leakage-safe selection semantics exist
 - distributed orchestration without a concrete workload
 - ML-controlled execution
 - profitability claims
