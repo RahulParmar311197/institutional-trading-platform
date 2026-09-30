@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -69,7 +70,13 @@ def test_fixed_strategy_oos_fold_is_deterministic_for_unordered_input() -> None:
 
 
 def test_fixed_strategy_oos_fold_rejects_training_window_event() -> None:
-    leaked = event("train-leak", -2, "100")
+    timestamp = BASE - timedelta(minutes=2)
+    leaked = replace(
+        event("train-leak", 0, "100"),
+        exchange_timestamp=timestamp,
+        provider_timestamp=timestamp,
+        ingestion_timestamp=timestamp,
+    )
 
     with pytest.raises(ValueError, match="confined to the fold test window"):
         evaluate_fixed_strategy_oos_fold(
