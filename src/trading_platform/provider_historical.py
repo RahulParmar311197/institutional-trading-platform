@@ -10,6 +10,7 @@ from urllib.parse import quote
 import httpx
 
 _SAFE_RETRY_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+_DHAN_EXPIRY_CODES = frozenset({0, 1, 2})
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +203,8 @@ class DhanHistoricalClient:
     ) -> tuple[HistoricalBar, ...]:
         if from_date >= to_date:
             raise ValueError("Dhan daily to_date is non-inclusive and must follow from_date")
+        if expiry_code not in _DHAN_EXPIRY_CODES:
+            raise ValueError("Dhan expiry_code must be one of 0, 1, 2")
         payload: dict[str, object] = {
             "securityId": _required_text(security_id, "security_id"),
             "exchangeSegment": _required_text(exchange_segment, "exchange_segment"),
