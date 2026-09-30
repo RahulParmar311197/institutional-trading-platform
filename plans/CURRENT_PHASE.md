@@ -10,11 +10,18 @@ The deterministic paper/replay/research vertical slice is green on `main`:
 
 Recorded events / local JSONL / provider historical bars → normalization → closed candles → versioned strategy identity → TradingDecision → independent risk → OMS/paper execution → position/P&L → audit/reconciliation/recovery.
 
-The same strategy/decision/risk contracts power replay-driven paper execution and the event-driven backtester.
+Canonical read-only historical slices remain validated for Upstox and Dhan cash/derivative daily data. Dhan derivative routing requires explicit persisted provider metadata; identifier rollovers and classification mismatches fail before HTTP.
 
-Canonical read-only historical slices are validated for Upstox and Dhan cash/derivative daily data. Dhan derivative routing requires explicit persisted provider exchange-segment, instrument-type and expiry-code metadata; identifier rollovers and classification mismatches fail before HTTP.
+The Dhan compact instrument-master boundary is validated in CI with mocked HTTP plus real PostgreSQL: exact official URL → bounded streaming retrieval → strict CSV parsing → conflict-safe synchronization → transactional commit. Synchronization enriches only pre-existing Dhan security-ID links.
 
-The Dhan compact instrument-master boundary is also validated end-to-end in CI with mocked HTTP plus real PostgreSQL: exact official URL → bounded streaming retrieval → strict CSV parsing → conflict-safe synchronization → transactional commit. Network fetch/parse completes before the database transaction begins, and synchronization enriches only pre-existing Dhan security-ID links.
+Research restartability now has two validated layers:
+
+- replay cursor/stream identity can be persisted locally using bounded, atomic, fsynced checkpoint files;
+- backtests can checkpoint the full deterministic state: replay cursor, closed/open candle state, simulated position/P&L, trades, equity curve, fees/drawdown and rejection count.
+
+A backtest interrupted after a simulated fill, serialized to disk, restored into a fresh backtester and completed produces exactly the same `BacktestResult` as an uninterrupted run. Checkpoints are bound to normalized stream content and the strategy/risk/execution configuration.
+
+Strategy identity is explicit in the evaluator contract. The registry provides immutable ID registration, ACTIVE/RETIRED lifecycle, fresh factory resolution and explicit historical resolution of retired versions; factories are revalidated against identity and history semantics.
 
 ### Safety controls already validated
 
@@ -28,37 +35,34 @@ The Dhan compact instrument-master boundary is also validated end-to-end in CI w
 - duplicate historical timestamps fail closed
 - invalid Dhan expiry codes/classifications fail before HTTP
 - provider-master redirects, oversized responses, invalid encoding/schema and metadata conflicts fail closed
-- Dhan master synchronization pre-validates all conflicts before mutation and never auto-creates canonical instruments
+- replay/backtest checkpoint stream/config mismatch and malformed schema fail closed
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
 
-- canonical instrument master/provider identifiers
-- migration `0006` nullable provider classification metadata
+- canonical instrument master/provider identifiers and migration `0006` provider classification metadata
 - point-in-time/full-range provider reference resolution with missing/overlap/rollover rejection
 - read-only Upstox/Dhan HTTP contract clients using mocked transports
 - canonical Upstox and Dhan daily services using PostgreSQL identifier resolution plus mocked HTTP
-- Dhan compact instrument-master parser for documented supported NSE/BSE equity/F&O rows
-- exact-URL, redirect-free, timeout/size-bounded Dhan compact-master fetcher using streamed bytes and UTF-8/BOM handling
-- conflict-safe Dhan master synchronizer scoped to incoming security IDs
-- transactional Dhan master refresh service that performs network/parse work before opening the database transaction
+- Dhan compact-master parser, bounded fetcher, conflict-safe synchronizer and transactional refresh
 - provider OHLC/provenance/duplicate-timestamp validation and OHLC→closed-candle normalization
-- deterministic replay checkpoints with strict versioned JSON and normalized-stream digest binding
+- deterministic replay plus atomic local replay checkpoint persistence
+- full-state deterministic backtest checkpoint/resume
 - configurable sessions, session-aligned multi-timeframe candles, SMA/EMA/RSI/ATR/VWAP
 - confirmed swings, BOS/CHoCH, FVG lifecycle, displacement-confirmed MSS and deterministic trend/volatility regime
-- versioned EMA crossover `v1` strategy identity
+- versioned EMA crossover identity plus immutable strategy registry/lifecycle
 - event-driven backtester with fees/slippage, risk rejection, no-look-ahead regression, equity curve and core metrics
 
 ### Current objective
 
-Validate real provider evidence where the environment permits it, while continuing research reproducibility and failure hardening without weakening canonical mapping or trading-safety boundaries.
+Deepen research reproducibility/failure hardening and versioned feature contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
 
 Immediate work:
 
-1. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record retrieval freshness/evidence without auto-linking instruments.
-2. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
-3. Extend replay checkpointing into orchestration-level durable continuation only where long-running replay/backtest jobs actually need it.
-4. Add broader feature/strategy output versioning plus registry/lifecycle semantics before scanner work.
+1. Add additional checkpoint/recovery fault injection and internal-state consistency validation before distributed research orchestration.
+2. Add broader versioned feature-output contracts on top of the tested strategy registry/lifecycle.
+3. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
+4. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
 5. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
 6. Define explicit dataset/period semantics before walk-forward, OOS, Sharpe/Sortino or annualized metrics.
 
@@ -71,6 +75,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 - unrestricted live order placement
 - any real broker order submission
 - broker credentials in source control
+- distributed research orchestration before checkpoint recovery is sufficiently hardened
 - ML-controlled execution
 - profitability claims
 - Kubernetes/microservice expansion
