@@ -14,6 +14,7 @@ from trading_platform.historical_service import (
     UnsupportedDhanInstrumentError,
 )
 from trading_platform.infrastructure import Infrastructure
+from trading_platform.instrument_identifiers import InstrumentIdentifierRangeNotCoveredError
 from trading_platform.instruments import (
     Exchange,
     Instrument,
@@ -110,6 +111,68 @@ async def test_canonical_dhan_daily_maps_cash_without_guessing(
                 "toDate": "2025-08-02",
             }
         ]
+    finally:
+        await infrastructure.close()
+
+
+async def test_canonical_dhan_daily_rejects_identifier_rollover_before_http() -> None:
+    require_integration_tests()
+    infrastructure = Infrastructure(Settings(_env_file=None))
+    instrument_id = uuid.uuid4()
+    http_called = False
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal http_called
+        http_called = True
+        return httpx.Response(500)
+
+    try:
+        async with infrastructure.sessions() as session:
+            session.add(
+                Instrument(
+                    id=instrument_id,
+                    exchange=Exchange.NSE,
+                    segment=Segment.CASH,
+                    trading_symbol=f"DHAN-ROLL-{instrument_id.hex[:8]}",
+                    name="Canonical Dhan Rollover Test",
+                    lot_size=1,
+                    tick_size=Decimal("0.05"),
+                    active=True,
+                )
+            )
+            session.add_all(
+                [
+                    InstrumentIdentifier(
+                        instrument_id=instrument_id,
+                        provider="dhan",
+                        external_id=str(700000 + (instrument_id.int % 99999)),
+                        valid_from=date(2025, 1, 1),
+                        valid_to=date(2025, 6, 30),
+                    ),
+                    InstrumentIdentifier(
+                        instrument_id=instrument_id,
+                        provider="dhan",
+                        external_id=str(800000 + (instrument_id.int % 99999)),
+                        valid_from=date(2025, 7, 1),
+                        valid_to=None,
+                    ),
+                ]
+            )
+            await session.commit()
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            service = CanonicalDhanHistoricalService(
+                sessions=infrastructure.sessions,
+                client=DhanHistoricalClient(access_token="token", http_client=http),
+            )
+            with pytest.raises(InstrumentIdentifierRangeNotCoveredError):
+                await service.fetch_daily(
+                    instrument_id=instrument_id,
+                    from_date=date(2025, 6, 1),
+                    to_date=date(2025, 8, 2),
+                )
+
+        assert http_called is False
     finally:
         await infrastructure.close()
 
