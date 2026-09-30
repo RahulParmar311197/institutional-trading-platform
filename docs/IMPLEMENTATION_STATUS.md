@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36702179242` completed successfully |
+| CI | TESTED | cumulative `main` run `36703522164` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -87,9 +87,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Backtest core analytics | TESTED | event-time equity curve, total return, max drawdown, trade counts, realized wins/losses, gross P/L and profit factor |
 | Research dataset boundaries | TESTED | versioned timezone-aware half-open train/validation/test windows reject overlap/naive timestamps, allow explicit gaps and use a UTC-canonical deterministic boundary identity |
 | Return-period semantics | TESTED | explicit positive interval required; equity observations must be timezone-aware, positive, strictly ordered and exactly regular; simple returns are computed without inferring frequency or annualization |
-| Walk-forward fold construction | TESTED | deterministic rolling train/test windows use explicit lengths, step and optional embargo; folds are half-open and no truncated final fold is emitted |
-| OOS evaluation/provenance | NOT_STARTED | result contract must bind fold/spec/boundary, strategy/feature identity and execution assumptions before evaluation/selection tooling |
-| Sharpe/Sortino/annualized metrics | NOT_STARTED | exact conventions and explicit `periods_per_year` usage remain pending |
+| Walk-forward fold construction | TESTED | deterministic rolling train/test windows use explicit lengths, step and optional embargo; folds are half-open, have UTC-canonical deterministic fold IDs, and no truncated final fold is emitted |
+| OOS evaluation/provenance | TESTED | versioned provenance/result envelopes bind boundary, fold/spec, strategy, ordered feature IDs, normalized stream digest, backtest config digest, execution costs and full deterministic backtest result identity; no selection/optimization is performed |
+| Sharpe/Sortino/annualized metrics | TESTED | requires explicit `periods_per_year`; Sharpe uses arithmetic mean excess return over sample standard deviation; Sortino uses arithmetic mean above target over population lower-partial-moment downside deviation; zero denominator returns `None` |
 | Walk-forward optimization/Monte Carlo | NOT_STARTED | later phase; build only on explicit provenance and leakage protections |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
 | Durable order/fill persistence | TESTED | decision linkage, deduplication, persistence and recovery |
@@ -116,7 +116,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `3580813d16f0035ccc02d8b50c82a8f2d6e1139b` in GitHub Actions run `36702179242`.
+A green cumulative `main` CI run completed for commit `df75f4b0266d673db3f145e458d9e27bfb36e2ef` in GitHub Actions run `36703522164`.
 
 The run passed in one workflow:
 
@@ -132,15 +132,13 @@ The run passed in one workflow:
 
 Validated additions in the current cumulative scope include:
 
-- schema-valid backtest checkpoint cross-field integrity checks for fees, realized P&L, reconstructed position and drawdown/peak state
-- replay-prefix validation of checkpoint equity points and candle-pipeline state
-- candidate-state restore that does not partially mutate an existing session when validation fails
-- fault-injected `os.replace` failure demonstrating preservation of the last good checkpoint file and cleanup of temporary state
-- versioned parameter-specific regime feature identity with canonical Decimal parameter representation
-- regime outputs carrying canonical instrument and event-time `as_of` provenance from the last closed candle
-- versioned research dataset boundary contracts with explicit half-open train/validation/test semantics, overlap rejection, explicit gaps and UTC-canonical identity across equivalent timezone representations
-- explicit return-period specifications that reject irregular/non-monotonic observation timing and do not infer annualization
-- deterministic rolling walk-forward fold generation with versioned spec identity, optional embargo, exact step size and full-fold-only emission
+- schema-valid backtest checkpoint cross-field integrity checks plus atomic failed-restore behavior and interrupted-replace preservation
+- versioned parameter-specific regime feature identity with instrument/event-time provenance
+- versioned research dataset boundaries, explicit regular return periods and deterministic rolling walk-forward folds
+- UTC-canonical deterministic fold identity for binding downstream evaluation artifacts to exact train/test windows
+- versioned OOS provenance that binds dataset boundary, fold/spec, strategy ID, ordered feature IDs, normalized stream digest, backtest configuration digest and explicit execution costs
+- deterministic OOS result identity over the complete backtest economics/trades/equity plus provenance identity
+- explicit risk-adjusted metrics: sample-standard-deviation Sharpe and population lower-partial-moment Sortino with mandatory explicit annualization metadata
 - previously validated full-state checkpoint/resume, immutable strategy registry, provider classification/master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
 ## Important validation boundaries
@@ -154,20 +152,21 @@ Validated additions in the current cumulative scope include:
 - Backtest integrity checks reconstruct deterministic local simulator state from persisted trades/replay prefix; they are not a cryptographic authenticity mechanism and do not imply exactly-once guarantees for arbitrary external side effects.
 - Interrupted-write coverage is deliberate fault injection around atomic replace, not a claim of exhaustive power-loss/filesystem-crash validation.
 - Versioned regime output is the first concrete derived-feature contract; no generic feature registry or universal schema is claimed.
-- Research boundary/return/fold contracts define deterministic temporal semantics only; no strategy selection, optimizer, OOS performance claim, Sharpe/Sortino or annualized statistic is implemented by them.
+- OOS provenance/result contracts identify deterministic research artifacts; they do not perform strategy selection, parameter search, optimizer ranking, statistical significance testing or profitability validation.
+- Sharpe/Sortino use the explicitly documented repository conventions only; no claim is made that those conventions are uniquely correct for every research use case.
 - Walk-forward folds are rolling fixed-length construction; expanding-window or purged-cross-validation semantics are not claimed.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
-- Backtest results are deterministic research outputs, not profitability claims.
+- Backtest results and risk-adjusted metrics are deterministic research outputs, not profitability claims.
 - Live trading remains disabled and unapproved.
 
 ## Highest-priority work
 
 1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first define initialization-versus-corruption semantics where missing persisted state is currently valid first-run behavior.
-2. Define OOS evaluation/result provenance contracts binding fold/spec/boundary, strategy/feature identities and execution assumptions before any selection/optimization tooling.
-3. Add Sharpe/Sortino or annualized metrics only after exact statistical conventions are explicit and `periods_per_year` is required rather than inferred.
-4. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
-5. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
+2. Add walk-forward strategy evaluation that consumes the tested fold/provenance contracts without parameter-selection leakage or optimizer shortcuts.
+3. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
+4. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
+5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
 6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
 
 ## Blockers
