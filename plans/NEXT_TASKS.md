@@ -24,15 +24,16 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, and selection-bound OOS evaluation. Validation and test windows are kept separate and candidate identity binds strategy/features/backtest configuration before test evaluation.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, and selection-bound OOS evaluation. Pending source-window candles are deliberately excluded from warm transfer, and validation/test windows remain isolated.
 
 Next:
 
-1. Define a typed strategy/feature state export-import boundary before applying warm-up or fitted state during validation/OOS execution. The provenance contract exists, but no state restoration/application path is implemented yet.
-2. Extend selected-OOS aggregate reporting only if it preserves each fold's selection-decision identity and does not synthesize a path across overlapping test folds.
-3. Add parameter-grid/search orchestration only on top of the validated fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
-4. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
-5. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
+1. Define a combined selected+warm OOS contract that binds the validation decision, research candidate, preparation-state identity and OOS result before parameter-grid/search orchestration is introduced.
+2. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
+3. Extend selected/warm OOS aggregate reporting only if it preserves each fold's decision/preparation identities and does not synthesize a path across overlapping test folds.
+4. Add parameter-grid/search orchestration only on top of the validated fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
+5. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
+6. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
 ## P3 — Deterministic SMC / strategy evolution
 
@@ -57,8 +58,8 @@ Next:
 
 ## Later
 
-- warm-start/fitted-state execution after a typed state import/export contract
-- parameter-grid/search orchestration after the validated selection boundary
+- generic fitted/model-state execution when a concrete stateful component requires it
+- parameter-grid/search orchestration after combined selected+warm provenance is explicit
 - Monte Carlo
 - distributed research orchestration when justified by workload
 - options engine
