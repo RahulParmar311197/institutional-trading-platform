@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import httpx
 import pytest
 
 from trading_platform.provider_historical import (
     DhanHistoricalClient,
+    HistoricalBar,
     UpstoxHistoricalClient,
     UpstoxHistoricalUnit,
 )
@@ -96,3 +98,29 @@ async def test_dhan_intraday_rejects_timezone_aware_request_datetimes() -> None:
                 from_datetime=datetime(2025, 1, 1, 9, 15, tzinfo=UTC),
                 to_datetime=datetime(2025, 1, 1, 10, 15, tzinfo=UTC),
             )
+
+
+def test_historical_bar_rejects_open_or_close_outside_range() -> None:
+    with pytest.raises(ValueError, match="must not exceed high"):
+        HistoricalBar(
+            timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            open=Decimal("103"),
+            high=Decimal("102"),
+            low=Decimal("99"),
+            close=Decimal("101"),
+            volume=1,
+            open_interest=None,
+            source="fixture",
+        )
+
+    with pytest.raises(ValueError, match="must not be below low"):
+        HistoricalBar(
+            timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            open=Decimal("100"),
+            high=Decimal("102"),
+            low=Decimal("99"),
+            close=Decimal("98"),
+            volume=1,
+            open_interest=None,
+            source="fixture",
+        )
