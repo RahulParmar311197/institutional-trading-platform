@@ -3,6 +3,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
 
 from trading_platform.config import Settings
 from trading_platform.dhan_instrument_master import (
@@ -100,20 +101,13 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
             assert result.unmatched_identifiers == 1
 
         async with infrastructure.sessions() as session:
-            matched = await session.scalar(
-                InstrumentIdentifier.__table__.select().where(
-                    InstrumentIdentifier.instrument_id == matched_id
-                )
-            )
-            # SQLAlchemy Core scalar returns the first selected column, so use ORM get below.
-            assert matched is not None
             matched_identifier = await session.scalar(
-                __import__("sqlalchemy").select(InstrumentIdentifier).where(
+                select(InstrumentIdentifier).where(
                     InstrumentIdentifier.instrument_id == matched_id
                 )
             )
             unmatched_identifier = await session.scalar(
-                __import__("sqlalchemy").select(InstrumentIdentifier).where(
+                select(InstrumentIdentifier).where(
                     InstrumentIdentifier.instrument_id == unmatched_id
                 )
             )
@@ -204,7 +198,7 @@ async def test_dhan_master_sync_detects_all_conflicts_before_mutation() -> None:
                 await DhanInstrumentMasterSynchronizer(session).synchronize(records)
 
             first_identifier = await session.scalar(
-                __import__("sqlalchemy").select(InstrumentIdentifier).where(
+                select(InstrumentIdentifier).where(
                     InstrumentIdentifier.instrument_id == first_id
                 )
             )
