@@ -688,19 +688,19 @@ def _validate_checkpoint_against_session(
     fees = Decimal("0")
     peak_equity = backtester.starting_equity
     for event, point in zip(prefix, checkpoint.equity_curve, strict=True):
-        trade = trades_by_event.get(event.event_id)
-        if trade is not None:
+        event_trade = trades_by_event.get(event.event_id)
+        if event_trade is not None:
             direction = (
                 SignalDirection.LONG
-                if trade.action is DecisionAction.LONG
+                if event_trade.action is DecisionAction.LONG
                 else SignalDirection.SHORT
             )
             position.apply_fill(
                 direction=direction,
-                quantity=trade.quantity,
-                price=trade.fill_price,
+                quantity=event_trade.quantity,
+                price=event_trade.fill_price,
             )
-            fees += trade.fee
+            fees += event_trade.fee
         unrealized = (
             position.unrealized_pnl(event.price)
             if position.quantity
