@@ -79,6 +79,8 @@ class ValidationCandidateScore:
     selection_fold_id: str
     candidate_id: str
     validation_result_id: str
+    objective_id: str
+    direction: ObjectiveDirection
     score: Decimal
 
     def __post_init__(self) -> None:
@@ -86,6 +88,7 @@ class ValidationCandidateScore:
             ("selection_fold_id", self.selection_fold_id),
             ("candidate_id", self.candidate_id),
             ("validation_result_id", self.validation_result_id),
+            ("objective_id", self.objective_id),
         ):
             if not value.strip():
                 raise ValueError(f"{name} must not be empty")
@@ -122,6 +125,10 @@ class SelectionDecision:
             for candidate in self.candidates
         ):
             raise ValueError("candidate validation score belongs to a different selection fold")
+        if any(candidate.objective_id != self.objective_id for candidate in self.candidates):
+            raise ValueError("candidate validation score uses a different objective")
+        if any(candidate.direction is not self.direction for candidate in self.candidates):
+            raise ValueError("candidate validation score uses a different objective direction")
         if self.selected_candidate_id not in candidate_ids:
             raise ValueError("selected_candidate_id must reference a candidate validation score")
 
@@ -180,6 +187,10 @@ def select_validation_candidate(
         for candidate in candidates
     ):
         raise ValueError("candidate validation score belongs to a different selection fold")
+    if any(candidate.objective_id != objective_id for candidate in candidates):
+        raise ValueError("candidate validation score uses a different objective")
+    if any(candidate.direction is not direction for candidate in candidates):
+        raise ValueError("candidate validation score uses a different objective direction")
 
     ordered = sorted(candidates, key=lambda candidate: candidate.candidate_id)
     selected = ordered[0]
