@@ -30,7 +30,17 @@ def require_integration_tests() -> None:
         pytest.skip("set ITP_RUN_INTEGRATION_TESTS=1 to run PostgreSQL integration tests")
 
 
-async def test_canonical_dhan_daily_maps_bse_cash_without_guessing() -> None:
+@pytest.mark.parametrize(
+    ("exchange", "expected_exchange_segment"),
+    [
+        (Exchange.NSE, "NSE_EQ"),
+        (Exchange.BSE, "BSE_EQ"),
+    ],
+)
+async def test_canonical_dhan_daily_maps_cash_without_guessing(
+    exchange: Exchange,
+    expected_exchange_segment: str,
+) -> None:
     require_integration_tests()
     infrastructure = Infrastructure(Settings(_env_file=None))
     instrument_id = uuid.uuid4()
@@ -56,10 +66,10 @@ async def test_canonical_dhan_daily_maps_bse_cash_without_guessing() -> None:
             session.add(
                 Instrument(
                     id=instrument_id,
-                    exchange=Exchange.BSE,
+                    exchange=exchange,
                     segment=Segment.CASH,
-                    trading_symbol=f"DHAN-BSE-{instrument_id.hex[:8]}",
-                    name="Canonical Dhan BSE Cash Test",
+                    trading_symbol=f"DHAN-{exchange.value}-{instrument_id.hex[:8]}",
+                    name=f"Canonical Dhan {exchange.value} Cash Test",
                     lot_size=1,
                     tick_size=Decimal("0.05"),
                     active=True,
@@ -92,7 +102,7 @@ async def test_canonical_dhan_daily_maps_bse_cash_without_guessing() -> None:
         assert requests == [
             {
                 "securityId": security_id,
-                "exchangeSegment": "BSE_EQ",
+                "exchangeSegment": expected_exchange_segment,
                 "instrument": "EQUITY",
                 "expiryCode": 0,
                 "oi": False,
