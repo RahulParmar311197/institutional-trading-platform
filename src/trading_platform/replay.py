@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from trading_platform.recorded_events import RecordedMarketEvent, normalize_recorded_events
 
 REPLAY_CHECKPOINT_VERSION = 1
+REPLAY_CHECKPOINT_FIELDS = frozenset(
+    {"version", "cursor", "event_count", "stream_digest"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +30,43 @@ class ReplayCheckpoint:
             character not in "0123456789abcdef" for character in self.stream_digest
         ):
             raise ValueError("checkpoint stream_digest must be a lowercase SHA-256 hex digest")
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "version": self.version,
+                "cursor": self.cursor,
+                "event_count": self.event_count,
+                "stream_digest": self.stream_digest,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    @classmethod
+    def from_json(cls, payload: str) -> "ReplayCheckpoint":
+        try:
+            raw = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid replay checkpoint JSON") from exc
+        if not isinstance(raw, dict):
+            raise ValueError("replay checkpoint JSON must be an object")
+        if frozenset(raw) != REPLAY_CHECKPOINT_FIELDS:
+            raise ValueError("replay checkpoint JSON has unexpected fields")
+        if type(raw["version"]) is not int:
+            raise ValueError("checkpoint version must be an integer")
+        if type(raw["cursor"]) is not int:
+            raise ValueError("checkpoint cursor must be an integer")
+        if type(raw["event_count"]) is not int:
+            raise ValueError("checkpoint event_count must be an integer")
+        if not isinstance(raw["stream_digest"], str):
+            raise ValueError("checkpoint stream_digest must be a string")
+        return cls(
+            version=raw["version"],
+            cursor=raw["cursor"],
+            event_count=raw["event_count"],
+            stream_digest=raw["stream_digest"],
+        )
 
 
 @dataclass(slots=True)
