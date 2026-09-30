@@ -4,57 +4,56 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 
 ## P0 — Keep main green and harden failure behavior
 
-1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip and Docker green on every `main` change.
-2. Add focused database-connectivity failure tests around durable execution and recovery.
-3. Add provider/replay interruption and duplicate/reordered-event cases beyond existing normalization coverage.
-4. Verify operational-health mode changes remain fail-safe when persisted/restored.
-5. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual CI evidence.
+1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip, Docker build and runtime import smoke green on every `main` change.
+2. Expand replay/provider interruption cases with deterministic restart/resume semantics where required.
+3. Add more persistence/network fault injection around recovery and control-state transitions.
+4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-## P1 — Backtest analytics
+Already validated in this area: audit-transaction rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, bounded transient provider retries, persistent risk controls, operational health gating and persisted health escalation.
 
-The minimal event-driven backtester is validated. Next:
+## P1 — Safe external historical service
 
-1. Record an explicit equity curve at deterministic event/trade boundaries.
-2. Calculate total/net return and maximum drawdown from the equity curve.
-3. Add deterministic trade statistics: count, winning/losing closed trades, gross profit/loss and payoff/profit-factor where denominators are valid.
-4. Keep fees/slippage explicit and separate from strategy alpha.
-5. Add regression fixtures proving repeated runs return identical analytics.
-6. Do not add Sharpe/Sortino until return-period semantics are explicit.
-
-## P2 — Deterministic SMC / regime expansion
-
-Already validated: trend/BOS/CHoCH, ATR-ratio volatility regime, deterministic FVG lifecycle.
+Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, and dated provider-ID resolution.
 
 Next:
 
-1. Define MSS separately from CHoCH with explicit event-time confirmation and availability semantics.
-2. Add selected liquidity concepts only where objective rules can be encoded and regression-tested.
-3. Add additional indicators such as ADX only with trusted reference/regression tests.
-4. Version feature/strategy outputs before adding a scanner.
+1. Add a service that resolves a canonical instrument to a provider ID for the requested historical interval.
+2. Reject or explicitly split requests that cross provider-identifier validity boundaries; never guess which ID applies.
+3. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
+4. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
+5. Do not treat mocked HTTP contract tests as real provider validation.
 
-## P3 — External read-only historical data
+## P2 — Research robustness
 
-Already validated: provider-neutral historical source contract + local JSONL implementation.
+Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve and core metrics.
 
 Next:
 
-1. Verify current official Upstox historical market-data API behavior, authentication, limits and timestamp semantics.
-2. Verify current official Dhan historical market-data API behavior, authentication, limits and timestamp semantics.
-3. Implement provider adapters only against verified official behavior.
-4. Preserve provider/exchange/ingestion timestamps and explicit recorded/live labels.
-5. Retry only idempotent read operations using bounded policies.
-6. Persist raw/provider evidence separately from normalized events where practical.
+1. Define period semantics before adding Sharpe/Sortino or annualization.
+2. Add explicit dataset boundaries before walk-forward/OOS tooling.
+3. Add deterministic checkpoint/resume behavior if long replay/backtest runs require continuation.
+4. Add walk-forward/OOS only after leakage protections remain green.
+
+## P3 — Deterministic SMC / strategy evolution
+
+Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle and displacement-confirmed MSS.
+
+Next:
+
+1. Add selected liquidity concepts only where objective event-time rules can be encoded and regression-tested.
+2. Add feature/strategy output versioning before scanner work.
+3. Add additional indicators only with trusted reference/regression tests.
+4. Keep strategy logic shared across replay/backtest/paper paths.
 
 ## P4 — Trading safety before any real order path
 
-Already validated: kill switches, READ_ONLY/CLOSE_ONLY/HALTED modes, persisted/recovered controls, health gating, transaction rollback and reconciliation/restart recovery.
+Already validated: kill switches, READ_ONLY/CLOSE_ONLY/HALTED modes, persisted/recovered controls, persisted health escalation, reconciliation/recovery and a deny-by-default live-gate policy.
 
 Next:
 
-1. Broaden injected database/network/provider failure tests.
-2. Add broker interfaces in read-only/shadow-safe mode only after historical adapters are verified.
-3. Define all live-trading gates as an explicit policy before any order-submission adapter is implemented.
-4. Do not add real order submission until explicit user approval exists.
+1. Integrate every live-gate input into any future execution boundary before an order API is introduced.
+2. Add broker interfaces in read-only/shadow-safe mode only when useful and verified.
+3. Do not add real order submission until all safety gates are implemented, validated and explicitly approved by the user.
 
 ## Later
 
@@ -73,4 +72,4 @@ Next:
 - No secrets in the repository.
 - No broad placeholder package generation.
 - A capability remains unverified until its required checks actually pass.
-- Recorded/mock/fixture data must be clearly labeled and never represented as live market data.
+- Mock/recorded/fixture data must be clearly labeled and never represented as live provider data.
