@@ -9,16 +9,16 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 3. Add more persistence/network/provider fault injection around recovery and control-state transitions.
 4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-Already validated: audit rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, transient provider retries, duplicate-provider-bar rejection, persistent controls/health escalation, replay checkpoint integrity, and Dhan provider-master conflict safety.
+Already validated: audit rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, transient provider retries, duplicate-provider-bar rejection, persistent controls/health escalation, replay checkpoint integrity, Dhan master conflict safety, bounded master retrieval and transactional refresh.
 
 ## P1 — Safe external historical/provider evidence
 
-Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan clients, point/range provider reference resolution, canonical Upstox historical service, canonical Dhan daily cash/derivative services, migration `0006` provider classification metadata, and Dhan compact-master parser/synchronizer. The synchronizer updates only existing security-ID links, pre-validates conflicts and does not auto-create canonical instruments.
+Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan clients, point/range provider reference resolution, canonical Upstox historical service, canonical Dhan daily cash/derivative services, migration `0006` provider classification metadata, Dhan compact-master parser/synchronizer, exact-URL bounded retrieval, and fetch→parse→transactional-sync orchestration. Synchronization updates only existing security-ID links, pre-validates conflicts and never auto-creates canonical instruments.
 
 Next:
 
-1. Add a secure read-only Dhan provider-master retrieval boundary with explicit URL allowlisting, timeout and maximum response size; feed bytes/text only into the tested parser/synchronizer.
-2. Keep live-master retrieval distinct from fixture-tested parsing; do not claim freshness unless a real retrieval succeeds and is validated.
+1. Validate a real Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record source URL, retrieval time/hash or equivalent freshness evidence without auto-linking instruments.
+2. Keep real-transfer validation distinct from MockTransport-tested retrieval code; do not claim freshness or provider availability until a real transfer succeeds.
 3. Add optional authenticated historical-provider smoke tests only when credentials/entitlements are securely supplied at runtime.
 4. Consider canonical Dhan intraday orchestration only after provider-local datetime/session semantics and request splitting are explicit.
 5. Keep provider raw evidence distinct from normalized candles and preserve provenance.
