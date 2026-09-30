@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -32,6 +34,34 @@ class HistoricalBar:
             raise ValueError("open interest must be non-negative")
 
 
+@dataclass(frozen=True, slots=True)
+class HistoricalRetryPolicy:
+    max_attempts: int = 3
+    base_delay_seconds: float = 0.25
+    max_delay_seconds: float = 2.0
+    retry_status_codes: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+
+    def __post_init__(self) -> None:
+        if self.max_attempts <= 0:
+            raise ValueError("max_attempts must be positive")
+        if self.max_attempts > 10:
+            raise ValueError("max_attempts must not exceed 10")
+        if self.base_delay_seconds < 0:
+            raise ValueError("base_delay_seconds must be non-negative")
+        if self.max_delay_seconds < self.base_delay_seconds:
+            raise ValueError("max_delay_seconds must be >= base_delay_seconds")
+        if any(status < 400 or status > 599 for status in self.retry_status_codes):
+            raise ValueError("retry_status_codes must contain HTTP error statuses")
+
+    def delay_for_retry(self, retry_number: int) -> float:
+        if retry_number <= 0:
+            raise ValueError("retry_number must be positive")
+        return min(
+            self.max_delay_seconds,
+            self.base_delay_seconds * (2 ** (retry_number - 1)),
+        )
+
+
 class UpstoxHistoricalUnit(StrEnum):
     MINUTES = "minutes"
     HOURS = "hours"
@@ -43,11 +73,18 @@ class UpstoxHistoricalUnit(StrEnum):
 class UpstoxHistoricalClient:
     base_url = "https://api.upstox.com/v3"
 
-    def __init__(self, *, access_token: str, http_client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        *,
+        access_token: str,
+        http_client: httpx.AsyncClient,
+        retry_policy: HistoricalRetryPolicy | None = None,
+    ) -> None:
         if not access_token.strip():
             raise ValueError("access_token must not be empty")
         self._access_token = access_token
         self._http = http_client
+        self._retry_policy = retry_policy or HistoricalRetryPolicy()
 
     async def fetch(
         self,
@@ -69,14 +106,17 @@ class UpstoxHistoricalClient:
             f"{self.base_url}/historical-candle/{encoded_instrument}/"
             f"{unit.value}/{interval}/{to_date.isoformat()}/{from_date.isoformat()}"
         )
-        response = await self._http.get(
-            url,
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {self._access_token}",
-            },
-        )
-        response.raise_for_status()
+
+        async def request() -> httpx.Response:
+            return await self._http.get(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {self._access_token}",
+                },
+            )
+
+        response = await _request_with_retry(request, self._retry_policy)
         payload: object = response.json()
         if not isinstance(payload, dict) or payload.get("status") != "success":
             raise ValueError("unexpected Upstox historical response")
@@ -130,11 +170,18 @@ class DhanHistoricalClient:
     base_url = "https://api.dhan.co/v2"
     intraday_intervals = frozenset({1, 5, 15, 25, 60})
 
-    def __init__(self, *, access_token: str, http_client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        *,
+        access_token: str,
+        http_client: httpx.AsyncClient,
+        retry_policy: HistoricalRetryPolicy | None = None,
+    ) -> None:
         if not access_token.strip():
             raise ValueError("access_token must not be empty")
         self._access_token = access_token
         self._http = http_client
+        self._retry_policy = retry_policy or HistoricalRetryPolicy()
 
     async def fetch_daily(
         self,
@@ -194,20 +241,44 @@ class DhanHistoricalClient:
         return _parse_dhan_bars(response, source="dhan_v2_intraday")
 
     async def _post(self, path: str, payload: dict[str, object]) -> dict[str, Any]:
-        response = await self._http.post(
-            f"{self.base_url}{path}",
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "access-token": self._access_token,
-            },
-            json=payload,
-        )
-        response.raise_for_status()
+        async def request() -> httpx.Response:
+            return await self._http.post(
+                f"{self.base_url}{path}",
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "access-token": self._access_token,
+                },
+                json=payload,
+            )
+
+        response = await _request_with_retry(request, self._retry_policy)
         raw: object = response.json()
         if not isinstance(raw, dict):
             raise ValueError("unexpected Dhan historical response")
         return cast(dict[str, Any], raw)
+
+
+async def _request_with_retry(
+    request: Callable[[], Awaitable[httpx.Response]],
+    policy: HistoricalRetryPolicy,
+) -> httpx.Response:
+    for attempt in range(1, policy.max_attempts + 1):
+        try:
+            response = await request()
+        except httpx.TransportError:
+            if attempt == policy.max_attempts:
+                raise
+        else:
+            if response.status_code not in policy.retry_status_codes:
+                response.raise_for_status()
+                return response
+            if attempt == policy.max_attempts:
+                response.raise_for_status()
+
+        await asyncio.sleep(policy.delay_for_retry(attempt))
+
+    raise RuntimeError("historical read retry loop exhausted unexpectedly")
 
 
 def _required_text(value: str, field_name: str) -> str:
