@@ -33,7 +33,11 @@ Research restartability and reproducibility now include:
 - deterministic candidate selection with fold/objective/direction binding and stable tie-breaking;
 - selected OOS evaluation that requires the test backtester candidate to match the validation decision before the test fold can run;
 - combined selected+warm OOS execution that validates the selected candidate first, then applies compatible train-derived closed-candle history, and binds decision/candidate/preparation/OOS identities in one immutable result;
-- deterministic explicit-candidate validation search that rejects duplicate candidate identities and test-window events, runs candidates in stable identity order and emits candidate-set/search identities plus the existing selection decision.
+- deterministic explicit-candidate validation search that rejects duplicate candidate identities and test-window events, runs candidates in stable identity order and emits candidate-set/search identities plus the existing selection decision;
+- versioned EMA crossover parameter grids with strict Cartesian materialization, canonical ordering, immutable grid identity and factory/strategy identity checks;
+- multi-fold EMA validation-grid orchestration that reuses one grid, selection specification and objective across ordered folds and never accepts test-fold evidence for ranking;
+- grid-search-bound selected+warm OOS execution that binds the exact grid/search evidence to the selected candidate, warm preparation and test result;
+- fold-level EMA grid OOS reporting that retains grid/search/decision/candidate/preparation/result identities per fold and reports arithmetic mean fold return without synthesizing trades or compounding overlapping test windows.
 
 Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
@@ -52,8 +56,9 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - replay/backtest malformed, mismatched and internally inconsistent checkpoints fail closed
 - research partitions/returns/folds enforce explicit time and leakage boundaries
 - warm OOS imports closed pre-test history only; incomplete train candles are never carried across the boundary
-- validation search accepts validation-window evidence only and rejects duplicate candidate identities
+- validation/grid search accepts validation-window evidence only and rejects invalid or duplicate candidate definitions
 - combined selected+warm OOS does not let preparation state change which candidate validation selected
+- grid OOS reports preserve per-fold research identities and do not construct a synthetic cross-fold portfolio path
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -74,6 +79,9 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - objective-bound deterministic validation selection and selection-bound OOS execution
 - combined selected+warm OOS execution with immutable decision/preparation/result identity binding
 - deterministic validation candidate-set search using real backtester results
+- deterministic EMA parameter-grid generation and multi-fold validation-grid search
+- grid/search-bound selected+warm OOS traceability
+- fold-level EMA grid OOS reporting preserving per-fold selection and preparation evidence
 
 ### Current objective
 
@@ -81,9 +89,9 @@ Continue failure hardening only where a distinct fail-closed invariant is missin
 
 Immediate work:
 
-1. Add an explicit deterministic parameter-grid specification/generator and multi-fold search orchestration on top of the tested explicit-candidate validation search; test-fold outcomes must never select or tune their own configuration.
+1. Add automatic fold dataset slicing/orchestration only if it can preserve the existing explicit half-open boundaries and reject missing/extra events rather than silently filtering leakage.
 2. Define generic fitted/model/feature-state export-import only when a stateful research component actually requires it; the current tested warm path is specifically closed-candle history for stateless strategy evaluation.
-3. Extend selected/warm OOS aggregate reporting only if per-fold selection-decision and preparation-state identities remain explicit and overlapping folds are never synthesized into one path.
+3. Define Monte Carlo semantics before implementation: sampling unit, replacement policy, deterministic seed, path count and which temporal/dependency relationships must remain intact.
 4. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
 5. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 6. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
@@ -98,6 +106,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 - broker credentials in source control
 - representing closed-candle warm-up as arbitrary fitted/model-state restoration
 - test-fold-driven parameter selection or optimizer ranking
+- claiming the EMA-specific grid as a generic optimizer framework
 - distributed orchestration without a concrete workload
 - ML-controlled execution
 - profitability claims
