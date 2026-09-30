@@ -44,7 +44,7 @@ class DhanInstrumentMasterSyncResult:
     matched: int
     updated: int
     unchanged: int
-    unmatched_identifiers: int
+    unmatched_records: int
 
 
 def parse_dhan_compact_instrument_master(
@@ -106,9 +106,18 @@ class DhanInstrumentMasterSynchronizer:
         records: tuple[DhanInstrumentMasterRecord, ...],
     ) -> DhanInstrumentMasterSyncResult:
         by_security_id = _index_records(records)
+        if not by_security_id:
+            return DhanInstrumentMasterSyncResult(
+                matched=0,
+                updated=0,
+                unchanged=0,
+                unmatched_records=0,
+            )
+
         result = await self.session.scalars(
             select(InstrumentIdentifier).where(
-                InstrumentIdentifier.provider == DHAN_PROVIDER
+                InstrumentIdentifier.provider == DHAN_PROVIDER,
+                InstrumentIdentifier.external_id.in_(tuple(by_security_id)),
             )
         )
         identifiers = tuple(result.all())
@@ -116,16 +125,12 @@ class DhanInstrumentMasterSynchronizer:
         proposed: list[
             tuple[InstrumentIdentifier, DhanInstrumentMasterRecord, bool]
         ] = []
-        matched = 0
         unchanged = 0
-        unmatched = 0
+        matched_security_ids: set[str] = set()
 
         for identifier in identifiers:
-            record = by_security_id.get(identifier.external_id)
-            if record is None:
-                unmatched += 1
-                continue
-            matched += 1
+            record = by_security_id[identifier.external_id]
+            matched_security_ids.add(identifier.external_id)
             _validate_existing_metadata(identifier, record)
             needs_update = _needs_update(identifier, record)
             proposed.append((identifier, record, needs_update))
@@ -142,11 +147,12 @@ class DhanInstrumentMasterSynchronizer:
                 identifier.provider_expiry_code = record.expiry_code
             updated += 1
 
+        matched = len(matched_security_ids)
         return DhanInstrumentMasterSyncResult(
             matched=matched,
             updated=updated,
             unchanged=unchanged,
-            unmatched_identifiers=unmatched,
+            unmatched_records=len(by_security_id) - matched,
         )
 
 
