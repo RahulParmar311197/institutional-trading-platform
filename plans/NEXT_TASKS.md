@@ -5,11 +5,10 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 ## P0 — Keep main green and harden failure behavior
 
 1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip, Docker build and runtime import smoke green on every `main` change.
-2. Continue persisted-control/recovery fault injection now that migration `0007` makes first-run initialization explicit: add malformed mode/scope and unavailable-database load/transition coverage where it exercises a distinct safety boundary.
-3. Continue persistence/network/provider failure injection where a real fail-closed invariant is missing; do not add synthetic failure tests that duplicate existing behavior.
-4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
+2. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains missing; persisted-control missing state, malformed mode/scope/key encodings and database-unavailable load/mutation paths are already covered.
+3. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-Already validated: audit rollback, duplicate-fill rollback, database-unavailable durable execution behavior, transient provider retries, duplicate-provider-bar rejection, persisted controls/health escalation, migration-backed operational-state initialization, missing/corrupt control-state rejection, replay/backtest checkpoint integrity/atomicity, interrupted checkpoint replacement preservation, Dhan master conflict safety, bounded master retrieval and transactional refresh.
+Already validated: audit rollback, duplicate-fill rollback, database-unavailable durable execution and control recovery, transient provider retries, duplicate-provider-bar rejection, persisted controls/health escalation, migration-backed operational-state initialization, missing/corrupt control-state rejection, replay/backtest checkpoint integrity/atomicity, interrupted checkpoint replacement preservation, Dhan master conflict safety, bounded master retrieval and transactional refresh.
 
 ## P1 — Safe external historical/provider evidence
 
@@ -25,16 +24,15 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, and fixed-strategy cold-start test-fold evaluation that rejects train/out-of-window event leakage.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation that rejects train/out-of-window event leakage, and fold-level aggregate reporting with strict provenance compatibility/order checks. Aggregate reports deliberately do not sum or compound potentially overlapping test folds.
 
 Next:
 
-1. Define aggregate walk-forward reporting compatibility/order semantics over immutable per-fold OOS result identities, then implement reporting without ranking or parameter selection.
-2. Keep training/test data isolation explicit; never let a test-fold outcome influence configuration used to evaluate that fold.
-3. Define warm-up/fitted-state provenance before allowing any training-window-derived state into OOS evaluation. The current evaluator is intentionally cold-start/test-only.
-4. Add optimizer/parameter search only after a separate selection/validation contract prevents test-fold leakage.
-5. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
-6. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
+1. Define warm-up/fitted-state provenance before allowing any training-window-derived state into OOS evaluation. The current evaluator is intentionally cold-start/test-only.
+2. Define a separate selection/validation contract before optimizer/parameter search; a test fold must never choose or influence the configuration evaluated on itself.
+3. Keep training/test data isolation explicit across any future warm-start or selection workflow.
+4. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
+5. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
 ## P3 — Deterministic SMC / strategy evolution
 
@@ -59,7 +57,7 @@ Next:
 
 ## Later
 
-- walk-forward optimization/parameter search after leakage-safe aggregation/selection contracts
+- walk-forward optimization/parameter search after leakage-safe warm-up/selection contracts
 - Monte Carlo
 - distributed research orchestration when justified by workload
 - options engine
