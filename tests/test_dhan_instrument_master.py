@@ -132,15 +132,10 @@ async def test_dhan_compact_master_fetcher_rejects_invalid_utf8_and_empty_body()
             await fetcher.fetch_text()
 
 
-def test_dhan_compact_master_fetcher_rejects_invalid_limits() -> None:
-    http = httpx.AsyncClient()
-    try:
+@pytest.mark.asyncio
+async def test_dhan_compact_master_fetcher_rejects_invalid_limits() -> None:
+    async with httpx.AsyncClient() as http:
         with pytest.raises(ValueError, match="max_bytes"):
             DhanCompactMasterFetcher(http_client=http, max_bytes=0)
         with pytest.raises(ValueError, match="timeout_seconds"):
             DhanCompactMasterFetcher(http_client=http, timeout_seconds=0)
-    finally:
-        # Construction does not perform I/O. Avoid leaking the client in this sync test.
-        import asyncio
-
-        asyncio.run(http.aclose())
