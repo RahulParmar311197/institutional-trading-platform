@@ -59,13 +59,7 @@ class ResearchDatasetBoundaries:
             ),
             "test": _window_payload(self.test),
         }
-        encoded = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-        ).encode("utf-8")
-        return f"research_boundaries_v{self.version}_{hashlib.sha256(encoded).hexdigest()}"
+        return _identity("research_boundaries", self.version, payload)
 
     def partition_for(self, timestamp: datetime) -> DatasetPartition | None:
         _require_aware(timestamp, "timestamp")
@@ -124,6 +118,21 @@ class WalkForwardFold:
         if self.train.end > self.test.start:
             raise ValueError("walk-forward train and test windows must not overlap")
 
+    @property
+    def fold_id(self) -> str:
+        payload = {
+            "index": self.index,
+            "spec_id": self.spec_id,
+            "train": _window_payload(self.train),
+            "test": _window_payload(self.test),
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+        return f"walk_forward_fold_{hashlib.sha256(encoded).hexdigest()}"
 
 
 def generate_walk_forward_folds(
@@ -153,6 +162,16 @@ def generate_walk_forward_folds(
         index += 1
 
     return tuple(folds)
+
+
+def _identity(prefix: str, version: int, payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return f"{prefix}_v{version}_{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _window_payload(window: ResearchWindow) -> dict[str, str]:
