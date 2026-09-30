@@ -15,9 +15,11 @@ from trading_platform.research_validation import (
     evaluate_fixed_strategy_validation_fold,
     score_validation_result,
 )
+from trading_platform.research_warm_state import prepare_pipeline_warm_state
 from trading_platform.walk_forward import (
     evaluate_fixed_strategy_oos_fold,
     evaluate_selected_strategy_oos_fold,
+    evaluate_warm_strategy_oos_fold,
 )
 
 BOUNDARY_ID = "research_boundaries_v1_fixture"
@@ -46,6 +48,17 @@ def shifted_event(event_id: str, minute: int):
         exchange_timestamp=timestamp,
         provider_timestamp=timestamp,
         ingestion_timestamp=timestamp,
+    )
+
+
+def priced_shifted_event(event_id: str, minute: int, price: str):
+    timestamp = BASE + timedelta(minutes=minute)
+    return replace(
+        event(event_id, 0, price),
+        exchange_timestamp=timestamp,
+        provider_timestamp=timestamp,
+        ingestion_timestamp=timestamp,
+        sequence=minute,
     )
 
 
@@ -129,6 +142,80 @@ def test_fixed_strategy_oos_fold_rejects_empty_input() -> None:
             [],
             boundary_id=BOUNDARY_ID,
             fold=fold(),
+        )
+
+
+def test_warm_oos_uses_only_closed_training_history() -> None:
+    current_fold = fold()
+    backtester = make_backtester()
+    prepared = prepare_pipeline_warm_state(
+        backtester,
+        [
+            priced_shifted_event("warm-a", -4, "100"),
+            priced_shifted_event("warm-b", -3, "99"),
+            priced_shifted_event("warm-pending", -2, "50"),
+        ],
+        boundary_id=BOUNDARY_ID,
+        fold=current_fold,
+        source_window=current_fold.train,
+        feature_ids=FEATURE_IDS,
+    )
+    test_events = [
+        priced_shifted_event("test-a", 0, "101"),
+        priced_shifted_event("test-b", 1, "101"),
+    ]
+
+    cold = evaluate_fixed_strategy_oos_fold(
+        make_backtester(),
+        test_events,
+        boundary_id=BOUNDARY_ID,
+        fold=current_fold,
+        feature_ids=FEATURE_IDS,
+    )
+    warm = evaluate_warm_strategy_oos_fold(
+        backtester,
+        test_events,
+        boundary_id=BOUNDARY_ID,
+        fold=current_fold,
+        prepared_state=prepared,
+        feature_ids=FEATURE_IDS,
+    )
+
+    assert cold.result.metrics.trade_count == 0
+    assert warm.oos.result.metrics.trade_count == 1
+    assert warm.oos.result.trades[0].reference_price == test_events[0].price
+    assert all(candle.close != test_events[0].price or candle.end <= current_fold.train.end for candle in prepared.state.closed_candles)
+    assert prepared.state.closed_candles[-1].close == priced_shifted_event("expected", -3, "99").price
+    assert warm.preparation_state_id == prepared.preparation_state_id
+    assert warm.result_id.startswith("warm_oos_v1_")
+
+
+def test_warm_oos_rejects_mismatched_provenance() -> None:
+    current_fold = fold()
+    backtester = make_backtester()
+    prepared = prepare_pipeline_warm_state(
+        backtester,
+        [
+            priced_shifted_event("warm-a", -4, "100"),
+            priced_shifted_event("warm-b", -3, "99"),
+        ],
+        boundary_id=BOUNDARY_ID,
+        fold=current_fold,
+        source_window=current_fold.train,
+        feature_ids=FEATURE_IDS,
+    )
+
+    with pytest.raises(ValueError, match="features"):
+        evaluate_warm_strategy_oos_fold(
+            backtester,
+            [
+                priced_shifted_event("test-a", 0, "101"),
+                priced_shifted_event("test-b", 1, "101"),
+            ],
+            boundary_id=BOUNDARY_ID,
+            fold=current_fold,
+            prepared_state=prepared,
+            feature_ids=("different-feature",),
         )
 
 
