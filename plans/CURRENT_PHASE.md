@@ -27,6 +27,8 @@ Strategy identity is explicit in the evaluator contract. The registry provides i
 
 The regime engine is the first derived research feature with an explicit versioned output contract. Its feature identity is parameter-specific and Decimal-canonical, and outputs carry canonical instrument plus closed-candle `as_of` event-time provenance.
 
+Research dataset separation is now explicit: train/validation/test windows are timezone-aware, half-open, ordered/non-overlapping, may contain deliberate gaps, and have a versioned identity canonicalized to UTC so equivalent timezone representations map to the same boundary ID.
+
 ### Safety controls already validated
 
 - live trading disabled by default
@@ -42,6 +44,7 @@ The regime engine is the first derived research feature with an explicit version
 - replay/backtest checkpoint stream/config mismatch, malformed schema and internally inconsistent economic/pipeline state fail closed
 - failed backtest restore leaves the existing in-memory session unchanged
 - interrupted local checkpoint replacement preserves the previously committed checkpoint
+- research dataset partitions reject overlap and naive timestamps
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -58,20 +61,21 @@ The regime engine is the first derived research feature with an explicit version
 - confirmed swings, BOS/CHoCH, FVG lifecycle, displacement-confirmed MSS and deterministic trend/volatility regime
 - versioned EMA crossover identity plus immutable strategy registry/lifecycle
 - versioned parameter-specific regime feature outputs with event-time provenance
+- versioned train/validation/test research boundaries with UTC-canonical identity
 - event-driven backtester with fees/slippage, risk rejection, no-look-ahead regression, equity curve and core metrics
 
 ### Current objective
 
-Deepen failure hardening and reproducible feature contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
+Deepen failure hardening and reproducible research contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
 
 Immediate work:
 
 1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first make first-run initialization versus persisted-state corruption semantics explicit where absence is currently valid.
-2. Extend versioned feature-output contracts to the next derived feature only when its event-time/reproducibility boundary is explicit.
-3. Define explicit dataset and period semantics before walk-forward/OOS or annualized research metrics.
-4. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
-5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
-6. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
+2. Define explicit return-period/frequency semantics before Sharpe/Sortino or annualization; do not infer frequency from irregular event timestamps.
+3. Add walk-forward/OOS fold generation only after return-period semantics and leakage protections are explicit on top of the tested dataset-boundary contract.
+4. Extend versioned feature-output contracts to the next derived feature only when its event-time/reproducibility boundary is explicit.
+5. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
+6. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
 
 ### Engineering gates
 
