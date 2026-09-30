@@ -1,6 +1,9 @@
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from trading_platform.recorded_events import RecordedMarketEvent, normalize_recorded_events
 
@@ -8,6 +11,7 @@ REPLAY_CHECKPOINT_VERSION = 1
 REPLAY_CHECKPOINT_FIELDS = frozenset(
     {"version", "cursor", "event_count", "stream_digest"}
 )
+REPLAY_CHECKPOINT_MAX_BYTES = 4096
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +73,67 @@ class ReplayCheckpoint:
         )
 
 
+class ReplayCheckpointFileStore:
+    """Atomic local persistence for replay checkpoints.
+
+    This store persists cursor identity only. It does not make processing side effects
+    exactly-once and must not be used as a substitute for transactional execution state.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        if not self.path.name:
+            raise ValueError("checkpoint path must name a file")
+
+    def load(self) -> ReplayCheckpoint | None:
+        try:
+            with self.path.open("rb") as handle:
+                payload = handle.read(REPLAY_CHECKPOINT_MAX_BYTES + 1)
+        except FileNotFoundError:
+            return None
+        if len(payload) > REPLAY_CHECKPOINT_MAX_BYTES:
+            raise ValueError("replay checkpoint file exceeds maximum size")
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("replay checkpoint file must be valid UTF-8") from exc
+        return ReplayCheckpoint.from_json(text)
+
+    def save(self, checkpoint: ReplayCheckpoint) -> None:
+        payload = (checkpoint.to_json() + "\n").encode("utf-8")
+        if len(payload) > REPLAY_CHECKPOINT_MAX_BYTES:
+            raise ValueError("replay checkpoint exceeds maximum size")
+
+        parent = self.path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.",
+            suffix=".tmp",
+            dir=parent,
+        )
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_name, self.path)
+            _fsync_directory(parent)
+        except BaseException:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+            raise
+
+    def clear(self) -> bool:
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            return False
+        _fsync_directory(self.path.parent)
+        return True
+
+
 @dataclass(slots=True)
 class ReplayStream:
     events: tuple[RecordedMarketEvent, ...]
@@ -125,6 +190,17 @@ class ReplayStream:
         end = min(start + count, len(self.events))
         self._cursor = end
         return self.events[start:end]
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    directory_fd = os.open(path, flags)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def _digest_events(events: tuple[RecordedMarketEvent, ...]) -> str:

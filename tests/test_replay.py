@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -9,7 +10,11 @@ from trading_platform.recorded_events import (
     RecordedMarketEvent,
     normalize_recorded_events,
 )
-from trading_platform.replay import ReplayCheckpoint, ReplayStream
+from trading_platform.replay import (
+    ReplayCheckpoint,
+    ReplayCheckpointFileStore,
+    ReplayStream,
+)
 
 INSTRUMENT_ID = uuid.uuid4()
 BASE = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
@@ -109,6 +114,63 @@ def test_replay_checkpoint_json_round_trip_preserves_resume_state() -> None:
 
     assert resumed.cursor == 1
     assert tuple(item.event_id for item in resumed.step(10)) == ("2", "3")
+
+
+def test_replay_checkpoint_file_store_round_trip_and_replace(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "replay.checkpoint.json"
+    store = ReplayCheckpointFileStore(path)
+    first = ReplayCheckpoint(cursor=1, event_count=3, stream_digest="0" * 64)
+    second = ReplayCheckpoint(cursor=2, event_count=3, stream_digest="0" * 64)
+
+    assert store.load() is None
+    store.save(first)
+    assert store.load() == first
+    store.save(second)
+
+    assert store.load() == second
+    assert path.read_text(encoding="utf-8").endswith("\n")
+    assert not tuple(path.parent.glob("*.tmp"))
+
+
+def test_replay_checkpoint_file_store_supports_cross_process_style_restore(
+    tmp_path: Path,
+) -> None:
+    events = [
+        event("1", seconds=0, sequence=1),
+        event("2", seconds=1, sequence=2),
+        event("3", seconds=2, sequence=3),
+    ]
+    checkpoint_path = tmp_path / "job" / "checkpoint.json"
+    first_store = ReplayCheckpointFileStore(checkpoint_path)
+    first_process = ReplayStream.from_events(events)
+    assert tuple(item.event_id for item in first_process.step(2)) == ("1", "2")
+    first_store.save(first_process.checkpoint())
+
+    second_store = ReplayCheckpointFileStore(checkpoint_path)
+    persisted = second_store.load()
+    assert persisted is not None
+    second_process = ReplayStream.from_events(events)
+    second_process.restore(persisted)
+
+    assert tuple(item.event_id for item in second_process.step(10)) == ("3",)
+    assert second_store.clear() is True
+    assert second_store.clear() is False
+    assert second_store.load() is None
+
+
+def test_replay_checkpoint_file_store_rejects_corrupt_or_oversized_state(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "checkpoint.json"
+    store = ReplayCheckpointFileStore(path)
+
+    path.write_bytes(b"\xff")
+    with pytest.raises(ValueError, match="valid UTF-8"):
+        store.load()
+
+    path.write_text("{" + ("x" * 5000), encoding="utf-8")
+    with pytest.raises(ValueError, match="maximum size"):
+        store.load()
 
 
 def test_replay_checkpoint_rejects_changed_stream_even_with_same_length() -> None:
