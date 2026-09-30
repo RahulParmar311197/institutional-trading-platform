@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36699181111` completed successfully |
+| CI | TESTED | cumulative `main` run `36700960171` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -67,9 +67,11 @@ This file is the source of truth for implementation status. Generated code alone
 | MSS | TESTED | CHOCH is not aliased to MSS; MSS additionally requires direction-aligned ATR-based displacement using only available candles |
 | SMC/ICT broader layer | IN_PROGRESS | FVG and MSS tested; blocks/liquidity concepts remain pending |
 | Regime engine | TESTED | deterministic trend + ATR-ratio LOW/NORMAL/HIGH volatility regime |
+| Versioned regime feature output | TESTED | parameter-specific `v1` feature identity canonicalizes Decimal thresholds and carries canonical instrument plus closed-candle `as_of` provenance |
+| Broader feature-output versioning | IN_PROGRESS | regime is versioned; extend only as additional derived features get explicit reproducibility/event-time boundaries |
 | Strategy identity | TESTED | `StrategyEvaluator` requires stable `strategy_id`; EMA crossover uses immutable parameter-specific `v1` IDs |
 | Strategy registry/lifecycle | TESTED | immutable registration by strategy ID, fresh factory resolution, explicit retirement, historical retired-version resolution and factory identity/history revalidation |
-| Strategy framework | IN_PROGRESS | identity and registry/lifecycle are tested; broader feature-output versioning and additional strategies remain pending |
+| Strategy framework | IN_PROGRESS | identity and registry/lifecycle are tested; additional strategies remain pending |
 | Decision engine | TESTED | explicit TradingDecision contract and fail-closed invalid-price/no-direction behavior |
 | Scanner | NOT_STARTED | later phase |
 | Replay | TESTED | normalized deterministic event stream and event→closed-candle→strategy→decision pipeline |
@@ -79,7 +81,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Event-driven backtester | TESTED | production-style replay/strategy/decision/risk/paper contracts, explicit fees/slippage, risk rejection and future-event isolation |
 | Backtest durable continuation | TESTED | versioned full-state checkpoint persists replay cursor, closed/open candle state, position/P&L, trades, equity, fees/drawdown and rejection count; fresh backtester resume after a simulated fill exactly matches uninterrupted result |
 | Backtest checkpoint configuration binding | TESTED | checkpoint binds strategy type/ID, interval, requested quantity, starting capital, execution assumptions, risk limits, operational mode and active risk locks; stream/config changes fail closed |
-| Backtest checkpoint file persistence | TESTED | bounded UTF-8 JSON state uses secure temporary file creation, fsync and atomic replace; malformed schema and incomplete-result behavior covered |
+| Backtest checkpoint internal integrity | TESTED | schema-valid state is cross-checked for trade/P&L/position/fee/drawdown consistency plus processed replay-prefix pipeline/equity correspondence |
+| Backtest restore atomicity | TESTED | restore validates candidate replay/pipeline/economic state before swapping session state; failed restore leaves an existing session unchanged |
+| Backtest checkpoint file persistence | TESTED | bounded UTF-8 JSON state uses secure temporary file creation, fsync and atomic replace; injected replace failure preserves the last good file and cleans temporary state |
 | Backtest core analytics | TESTED | event-time equity curve, total return, max drawdown, trade counts, realized wins/losses, gross P/L and profit factor |
 | Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
@@ -102,12 +106,12 @@ This file is the source of truth for implementation status. Generated code alone
 | ML subsystem | NOT_STARTED | later phase |
 | Next.js frontend | NOT_STARTED | later phase |
 | Paper E2E workflow | TESTED | decision → risk → OMS → paper fill → position → reconciliation plus replay→durable-paper |
-| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay/backtest checkpoint integrity and persisted health-escalation cases covered; broader fault matrix pending |
+| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay/backtest checkpoint integrity/atomicity and persisted health-escalation cases covered; broader fault matrix pending |
 | Controlled live release | NOT_STARTED | live remains disabled and is not approved |
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `cf293f519ef4d8c9a9d7aca65f299c68a40f68d6` in GitHub Actions run `36699181111`.
+A green cumulative `main` CI run completed for commit `ff191c37d3a871997ae00f45c7d2844664c65ed8` in GitHub Actions run `36700960171`.
 
 The run passed in one workflow:
 
@@ -123,13 +127,13 @@ The run passed in one workflow:
 
 Validated additions in the current cumulative scope include:
 
-- atomic bounded local replay-checkpoint persistence with fresh-process-style restore
-- stateful backtest sessions with versioned full economic checkpoints
-- interrupted-after-fill → serialized checkpoint → fresh backtester → resumed completion producing the exact uninterrupted `BacktestResult`
-- fail-closed backtest restore on changed normalized stream or changed strategy/risk/execution configuration
-- immutable strategy registry with ACTIVE/RETIRED lifecycle and explicit historical resolution
-- strategy-factory revalidation preventing silent strategy identity or minimum-history drift
-- previously validated Dhan provider classification, compact-master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
+- schema-valid backtest checkpoint cross-field integrity checks for fees, realized P&L, reconstructed position and drawdown/peak state
+- replay-prefix validation of checkpoint equity points and candle-pipeline state
+- candidate-state restore that does not partially mutate an existing session when validation fails
+- fault-injected `os.replace` failure demonstrating preservation of the last good checkpoint file and cleanup of temporary state
+- versioned parameter-specific regime feature identity with canonical Decimal parameter representation
+- regime outputs carrying canonical instrument and event-time `as_of` provenance from the last closed candle
+- previously validated full-state checkpoint/resume, immutable strategy registry, provider classification/master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
 ## Important validation boundaries
 
@@ -139,7 +143,9 @@ Validated additions in the current cumulative scope include:
 - Provider-master synchronization never auto-creates or symbol-matches canonical instruments; only pre-existing Dhan security-ID links are enriched.
 - Replay-only checkpoint files persist cursor/stream identity; full backtest checkpoints separately persist deterministic research economic state.
 - Backtest checkpointing is local file persistence, not a distributed scheduler/job runner or production research service.
-- Backtest exactly-resumed behavior is validated for the deterministic in-process simulator; it does not imply exactly-once guarantees for arbitrary external side effects.
+- Backtest integrity checks reconstruct deterministic local simulator state from persisted trades/replay prefix; they are not a cryptographic authenticity mechanism and do not imply exactly-once guarantees for arbitrary external side effects.
+- Interrupted-write coverage is deliberate fault injection around atomic replace, not a claim of exhaustive power-loss/filesystem-crash validation.
+- Versioned regime output is the first concrete derived-feature contract; no generic feature registry or universal schema is claimed.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
 - Backtest results are deterministic research outputs, not profitability claims.
@@ -147,13 +153,13 @@ Validated additions in the current cumulative scope include:
 
 ## Highest-priority work
 
-1. Add additional checkpoint/recovery fault-injection and internal-state consistency checks before introducing any distributed research orchestration.
-2. Add broader versioned feature-output contracts now that strategy registry/lifecycle semantics are explicit.
-3. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
-4. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
-5. Continue SMC only with objective/testable liquidity concepts; add walk-forward/OOS only after dataset boundaries and period semantics are explicit.
+1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first define initialization-versus-corruption semantics where missing persisted state is currently valid first-run behavior.
+2. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
+3. Define explicit dataset/period semantics before walk-forward/OOS or annualized metrics.
+4. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
+5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
 6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
 
 ## Blockers
 
-No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. A real Dhan master transfer could not be validated through the available web retrieval path because it does not accept the endpoint's octet-stream content. Live trading remains deliberately unavailable and no broker order execution has been introduced.
+No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. A real Dhan master transfer could not be validated through the available web retrieval path because it does not accept the endpoint's octet-stream content. Persisted-control corruption hardening needs an explicit initialization contract before missing operational state can safely be treated as corruption. Live trading remains deliberately unavailable and no broker order execution has been introduced.
