@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36710026023` completed successfully |
+| CI | TESTED | cumulative `main` run `36710434256` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -96,6 +96,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Validation split/selection contract | TESTED | deterministic fit/optional-embargo/validation split stays wholly inside the parent train window and preserves the test window; candidate evidence is bound to fold, objective and direction with deterministic tie-breaking |
 | Validation backtest evidence | TESTED | validation evaluator accepts only validation-window events, binds strategy/features/backtest configuration and normalized stream to a deterministic result identity, and derives objective scores from the real backtest result |
 | Selection-bound OOS evaluation | TESTED | selected OOS execution requires the exact parent fold/selection fold/decision and candidate identity chosen from validation evidence before evaluating test-window events; result identity binds the selection decision to the OOS result |
+| Selected + warm OOS evaluation | TESTED | one OOS boundary now requires the exact validation-selected candidate and a compatible train-derived warm preparation before test execution; immutable result identity jointly binds selection decision, candidate, preparation-state and OOS result IDs |
 | Sharpe/Sortino/annualized metrics | TESTED | requires explicit `periods_per_year`; Sharpe uses arithmetic mean excess return over sample standard deviation; Sortino uses arithmetic mean above target over population lower-partial-moment downside deviation; zero denominator returns `None` |
 | Walk-forward aggregate reporting | TESTED | ordered contiguous fold results require compatible boundary/spec/strategy/features/config/execution assumptions; report identity is UTC-canonical and immutable; summaries remain fold-level and use arithmetic mean fold return without summing/compounding potentially overlapping folds |
 | Walk-forward optimization/Monte Carlo | NOT_STARTED | parameter search/orchestration and Monte Carlo remain pending; build only on explicit provenance and leakage protections |
@@ -125,7 +126,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `9b0e45efe5a508f8786fa620d85a7f4cb64d3dae` in GitHub Actions run `36710026023`.
+A green cumulative `main` CI run completed for commit `a8527d02c6791ffdf52f128e1b854648f6685d7b` in GitHub Actions run `36710434256`.
 
 The run passed in one workflow:
 
@@ -153,6 +154,7 @@ Validated additions in the current cumulative scope include:
 - warm OOS execution that imports only closed pre-test candle history, rejects provenance/configuration/window mismatches and binds the preparation-state identity to the OOS result
 - fit/embargo/validation splitting inside the parent train window, validation-only backtest evidence, objective-bound candidate scores and deterministic selection
 - selected OOS evaluation that rejects a backtester/configuration whose candidate identity was not selected from the exact validation fold
+- combined selected+warm OOS evaluation that rejects candidate/test-window mismatches before execution and binds decision/candidate/preparation/OOS identities in one result
 - migration-backed persistent control initialization plus fail-closed missing state, invalid mode/scope, malformed lock-key and database-unavailable load/mutation coverage
 - previously validated full-state checkpoint/resume, immutable strategy registry, provider classification/master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
@@ -170,7 +172,7 @@ Validated additions in the current cumulative scope include:
 - The tested warm-state path transfers replay-pipeline closed-candle history only. It does not serialize mutable strategy internals, fitted model parameters, feature-engine internal state, optimizer state or arbitrary external state.
 - Pending/incomplete training candles are intentionally not transferred across the train→test boundary, preventing the first test event from closing a pre-test candle and emitting a contaminated OOS decision.
 - Validation selection currently operates on explicitly supplied candidate backtest configurations and two repository-defined objectives; no automatic parameter grid/search engine or statistical significance claim is implemented.
-- Selection-bound OOS evaluation remains separate from warm-state OOS execution; a combined selected+warm path is not yet implemented and must preserve both provenance contracts when added.
+- Combined selected+warm OOS first validates the candidate chosen from validation, then applies train-derived closed-candle history; the preparation state does not alter which candidate validation selected.
 - Walk-forward aggregate reports are fold-level summaries. Because generated folds may have overlapping test windows when `step < test_length`, the report deliberately does not sum trades/P&L or compound fold returns into a single path.
 - Sharpe/Sortino use the explicitly documented repository conventions only; no claim is made that those conventions are uniquely correct for every research use case.
 - Walk-forward folds are rolling fixed-length construction; expanding-window or purged-cross-validation semantics are not claimed.
@@ -182,9 +184,9 @@ Validated additions in the current cumulative scope include:
 
 ## Highest-priority work
 
-1. Define a generic fitted/model/feature-state export-import contract only when a stateful research component requires it; do not misrepresent closed-candle warm-up as arbitrary fitted-state restoration.
-2. Define a leakage-safe combined selected+warm OOS boundary, including how preparation-state identity participates in validation candidate identity, before adding parameter-grid/search orchestration.
-3. Add parameter-grid/search orchestration only on top of the tested fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
+1. Add deterministic parameter-grid/search orchestration that emits validation evidence and selection decisions only; test-fold outcomes must never participate in candidate ranking.
+2. Define generic fitted/model/feature-state export-import only when a stateful research component requires it; do not misrepresent closed-candle warm-up as arbitrary fitted-state restoration.
+3. Extend selected/warm OOS aggregate reporting only if every fold retains its selection-decision and preparation-state identities and overlapping test folds are not synthesized into one path.
 4. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains untested; avoid redundant synthetic cases now that persisted-control missing/corrupt/unavailable paths are covered.
 5. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
 6. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
