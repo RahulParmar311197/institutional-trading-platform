@@ -45,10 +45,12 @@ class InstrumentIdentifierRepository:
         identifiers = tuple((await self.session.scalars(statement)).all())
         if not identifiers:
             raise InstrumentIdentifierNotFoundError(
-                f"no {normalized_provider} identifier for instrument {instrument_id} on {on_date}"
+                f"no {normalized_provider} identifier for instrument "
+                f"{instrument_id} on {on_date}"
             )
         if len(identifiers) > 1:
             raise AmbiguousInstrumentIdentifierError(
-                f"multiple {normalized_provider} identifiers for instrument {instrument_id} on {on_date}"
+                f"multiple {normalized_provider} identifiers for instrument "
+                f"{instrument_id} on {on_date}"
             )
         return identifiers[0]
