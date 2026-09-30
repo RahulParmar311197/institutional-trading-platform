@@ -119,7 +119,9 @@ class SelectionDecision:
             raise ValueError("candidate validation scores must have unique candidate_id values")
         result_ids = tuple(candidate.validation_result_id for candidate in self.candidates)
         if len(set(result_ids)) != len(result_ids):
-            raise ValueError("candidate validation scores must have unique validation_result_id values")
+            raise ValueError(
+                "candidate validation scores must have unique validation_result_id values"
+            )
         if any(
             candidate.selection_fold_id != self.selection_fold_id
             for candidate in self.candidates
