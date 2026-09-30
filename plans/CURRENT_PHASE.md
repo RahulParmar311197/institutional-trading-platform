@@ -14,6 +14,8 @@ The same strategy/decision/risk contracts power replay-driven paper execution an
 
 Canonical read-only historical slices are validated for Upstox and Dhan cash/derivative daily data. Dhan derivative routing requires explicit persisted provider exchange-segment, instrument-type and expiry-code metadata; identifier rollovers and classification mismatches fail before HTTP.
 
+The Dhan compact instrument-master boundary is also validated end-to-end in CI with mocked HTTP plus real PostgreSQL: exact official URL → bounded streaming retrieval → strict CSV parsing → conflict-safe synchronization → transactional commit. Network fetch/parse completes before the database transaction begins, and synchronization enriches only pre-existing Dhan security-ID links.
+
 ### Safety controls already validated
 
 - live trading disabled by default
@@ -22,10 +24,11 @@ Canonical read-only historical slices are validated for Upstox and Dhan cash/der
 - READ_ONLY/CLOSE_ONLY/HALTED operational modes
 - persistence/recovery of risk controls and health-driven restrictions
 - transactional rollback/no in-memory economic publication on duplicate fill, audit failure or unavailable database
-- bounded transient-only provider retries; auth/client failures are not retried
+- bounded transient-only historical provider retries; auth/client failures are not retried
 - duplicate historical timestamps fail closed
 - invalid Dhan expiry codes/classifications fail before HTTP
-- provider-master conflicts are detected before any metadata mutation
+- provider-master redirects, oversized responses, invalid encoding/schema and metadata conflicts fail closed
+- Dhan master synchronization pre-validates all conflicts before mutation and never auto-creates canonical instruments
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -36,7 +39,9 @@ Canonical read-only historical slices are validated for Upstox and Dhan cash/der
 - read-only Upstox/Dhan HTTP contract clients using mocked transports
 - canonical Upstox and Dhan daily services using PostgreSQL identifier resolution plus mocked HTTP
 - Dhan compact instrument-master parser for documented supported NSE/BSE equity/F&O rows
-- conflict-safe Dhan master synchronizer that enriches only pre-existing Dhan security-ID links, never guesses canonical symbol mappings, and scopes queries to incoming security IDs
+- exact-URL, redirect-free, timeout/size-bounded Dhan compact-master fetcher using streamed bytes and UTF-8/BOM handling
+- conflict-safe Dhan master synchronizer scoped to incoming security IDs
+- transactional Dhan master refresh service that performs network/parse work before opening the database transaction
 - provider OHLC/provenance/duplicate-timestamp validation and OHLC→closed-candle normalization
 - deterministic replay checkpoints with strict versioned JSON and normalized-stream digest binding
 - configurable sessions, session-aligned multi-timeframe candles, SMA/EMA/RSI/ATR/VWAP
@@ -46,13 +51,13 @@ Canonical read-only historical slices are validated for Upstox and Dhan cash/der
 
 ### Current objective
 
-Connect verified provider evidence to the tested parsing/synchronization boundary without introducing unsafe auto-linking, then continue research reproducibility and failure hardening.
+Validate real provider evidence where the environment permits it, while continuing research reproducibility and failure hardening without weakening canonical mapping or trading-safety boundaries.
 
 Immediate work:
 
-1. Add a secure read-only Dhan provider-master retrieval boundary with bounded response size/timeouts and feed its content into the existing parser/synchronizer; never auto-create canonical instruments.
-2. Add optional authenticated read-only historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
-3. Extend replay checkpointing into orchestration-level durable continuation only where long-running research/backtest jobs need it.
+1. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record retrieval freshness/evidence without auto-linking instruments.
+2. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
+3. Extend replay checkpointing into orchestration-level durable continuation only where long-running replay/backtest jobs actually need it.
 4. Add broader feature/strategy output versioning plus registry/lifecycle semantics before scanner work.
 5. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
 6. Define explicit dataset/period semantics before walk-forward, OOS, Sharpe/Sortino or annualized metrics.
