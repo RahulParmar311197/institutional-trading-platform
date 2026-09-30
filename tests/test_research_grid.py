@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from decimal import Decimal
 
@@ -9,8 +10,12 @@ from trading_platform.backtest import EventDrivenBacktester
 from trading_platform.research_grid import (
     EmaCrossoverParameterGrid,
     EmaCrossoverParameters,
+    FoldValidationInput,
     run_ema_validation_grid_search,
+    run_ema_walk_forward_grid_search,
 )
+from trading_platform.research_periods import ResearchWindow, WalkForwardFold
+from trading_platform.research_selection import SelectionSpec
 from trading_platform.research_validation import ValidationObjective
 from trading_platform.strategy import EmaCrossoverStrategy
 
@@ -25,6 +30,31 @@ def make_candidate(parameters: EmaCrossoverParameters) -> EventDrivenBacktester:
         risk_engine=risk_engine(),
         requested_quantity=1,
         starting_equity=Decimal("10000"),
+    )
+
+
+def parent_fold(index: int, offset: int) -> WalkForwardFold:
+    return WalkForwardFold(
+        index=index,
+        train=ResearchWindow(
+            start=BASE + timedelta(minutes=offset - 10),
+            end=BASE + timedelta(minutes=offset - 1),
+        ),
+        test=ResearchWindow(
+            start=BASE + timedelta(minutes=offset),
+            end=BASE + timedelta(minutes=offset + 5),
+        ),
+        spec_id="walk_forward_v1_fixture",
+    )
+
+
+def validation_event(event_id: str, minute: int, price: str):
+    timestamp = BASE + timedelta(minutes=minute)
+    return replace(
+        event(event_id, max(0, minute), price),
+        exchange_timestamp=timestamp,
+        provider_timestamp=timestamp,
+        ingestion_timestamp=timestamp,
     )
 
 
@@ -154,6 +184,102 @@ def test_grid_search_identity_changes_when_grid_changes() -> None:
     )
 
     assert first.grid_id != second.grid_id
+
+
+def test_walk_forward_grid_search_reuses_exact_grid_across_folds() -> None:
+    grid = EmaCrossoverParameterGrid.from_axes(
+        fast_periods=(1,),
+        slow_periods=(2, 3),
+    )
+    selection_spec = SelectionSpec(validation_length=timedelta(minutes=3))
+    fold_inputs = (
+        FoldValidationInput(fold=parent_fold(0, 0), events=tuple(validation_events())),
+        FoldValidationInput(
+            fold=parent_fold(1, 10),
+            events=(
+                validation_event("fold-1-a", 6, "101"),
+                validation_event("fold-1-b", 7, "100"),
+                validation_event("fold-1-c", 8, "102"),
+            ),
+        ),
+    )
+
+    first = run_ema_walk_forward_grid_search(
+        grid,
+        make_candidate,
+        fold_inputs,
+        boundary_id=BOUNDARY_ID,
+        selection_spec=selection_spec,
+        objective=ValidationObjective.TOTAL_RETURN,
+        feature_ids=FEATURE_IDS,
+    )
+    second = run_ema_walk_forward_grid_search(
+        grid,
+        make_candidate,
+        fold_inputs,
+        boundary_id=BOUNDARY_ID,
+        selection_spec=selection_spec,
+        objective=ValidationObjective.TOTAL_RETURN,
+        feature_ids=FEATURE_IDS,
+    )
+
+    assert len(first.folds) == 2
+    assert all(result.grid_id == grid.grid_id for result in first.folds)
+    assert all(
+        len(result.search.evaluations) == len(grid.candidates) for result in first.folds
+    )
+    assert first.result_id == second.result_id
+    assert first.result_id.startswith("ema_walk_forward_grid_search_v1_")
+
+
+def test_walk_forward_grid_search_rejects_out_of_order_folds() -> None:
+    grid = EmaCrossoverParameterGrid.from_axes(
+        fast_periods=(1,),
+        slow_periods=(2,),
+    )
+    first = FoldValidationInput(
+        fold=parent_fold(0, 0),
+        events=tuple(validation_events()),
+    )
+    second = FoldValidationInput(
+        fold=parent_fold(1, 10),
+        events=(
+            validation_event("fold-1-a", 6, "101"),
+            validation_event("fold-1-b", 7, "100"),
+            validation_event("fold-1-c", 8, "102"),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="unique increasing indices"):
+        run_ema_walk_forward_grid_search(
+            grid,
+            make_candidate,
+            (second, first),
+            boundary_id=BOUNDARY_ID,
+            selection_spec=SelectionSpec(validation_length=timedelta(minutes=3)),
+            objective=ValidationObjective.TOTAL_RETURN,
+        )
+
+
+def test_walk_forward_grid_search_rejects_test_event_in_any_fold() -> None:
+    grid = EmaCrossoverParameterGrid.from_axes(
+        fast_periods=(1,),
+        slow_periods=(2,),
+    )
+    contaminated = FoldValidationInput(
+        fold=parent_fold(1, 10),
+        events=(validation_event("test-leak", 10, "100"),),
+    )
+
+    with pytest.raises(ValueError, match="validation window"):
+        run_ema_walk_forward_grid_search(
+            grid,
+            make_candidate,
+            (contaminated,),
+            boundary_id=BOUNDARY_ID,
+            selection_spec=SelectionSpec(validation_length=timedelta(minutes=3)),
+            objective=ValidationObjective.TOTAL_RETURN,
+        )
 
 
 def test_validation_fixture_still_precedes_test_window() -> None:
