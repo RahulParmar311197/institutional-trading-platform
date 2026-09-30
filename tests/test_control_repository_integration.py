@@ -89,6 +89,49 @@ async def test_missing_operational_state_fails_closed_after_migration_initializa
         await infrastructure.close()
 
 
+async def test_corrupt_persisted_mode_fails_closed() -> None:
+    require_integration_tests()
+
+    infrastructure = Infrastructure(Settings(_env_file=None))
+    try:
+        async with infrastructure.sessions() as session:
+            record = await session.get(OperationalStateRecord, OPERATIONAL_STATE_ID)
+            assert record is not None
+            record.mode = "CORRUPT_MODE"
+            await session.flush()
+
+            with pytest.raises(ValueError, match="OperationalMode"):
+                await RiskControlRepository(session).load()
+
+            await session.rollback()
+    finally:
+        await infrastructure.close()
+
+
+async def test_corrupt_persisted_scope_fails_closed() -> None:
+    require_integration_tests()
+
+    infrastructure = Infrastructure(Settings(_env_file=None))
+    try:
+        async with infrastructure.sessions() as session:
+            session.add(
+                RiskLockRecord(
+                    scope="CORRUPT_SCOPE",
+                    lock_key="fixture-key",
+                    reason="corrupt fixture",
+                    active=True,
+                )
+            )
+            await session.flush()
+
+            with pytest.raises(ValueError, match="KillSwitchScope"):
+                await RiskControlRepository(session).load()
+
+            await session.rollback()
+    finally:
+        await infrastructure.close()
+
+
 async def test_corrupt_persisted_global_lock_storage_key_fails_closed() -> None:
     require_integration_tests()
 
