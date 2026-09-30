@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36698092866` completed successfully |
+| CI | TESTED | cumulative `main` run `36699181111` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -67,7 +67,9 @@ This file is the source of truth for implementation status. Generated code alone
 | MSS | TESTED | CHOCH is not aliased to MSS; MSS additionally requires direction-aligned ATR-based displacement using only available candles |
 | SMC/ICT broader layer | IN_PROGRESS | FVG and MSS tested; blocks/liquidity concepts remain pending |
 | Regime engine | TESTED | deterministic trend + ATR-ratio LOW/NORMAL/HIGH volatility regime |
-| Strategy framework | IN_PROGRESS | protocol/history contract + versioned EMA crossover `v1` identity tested; registry/lifecycle/broader feature versioning pending |
+| Strategy identity | TESTED | `StrategyEvaluator` requires stable `strategy_id`; EMA crossover uses immutable parameter-specific `v1` IDs |
+| Strategy registry/lifecycle | TESTED | immutable registration by strategy ID, fresh factory resolution, explicit retirement, historical retired-version resolution and factory identity/history revalidation |
+| Strategy framework | IN_PROGRESS | identity and registry/lifecycle are tested; broader feature-output versioning and additional strategies remain pending |
 | Decision engine | TESTED | explicit TradingDecision contract and fail-closed invalid-price/no-direction behavior |
 | Scanner | NOT_STARTED | later phase |
 | Replay | TESTED | normalized deterministic event stream and event→closed-candle→strategy→decision pipeline |
@@ -75,7 +77,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Replay checkpoint file persistence | TESTED | bounded UTF-8 local file store uses secure temp creation, file+directory fsync and atomic replacement; fresh-process-style load/restore covered in CI |
 | Replay → durable paper integration | TESTED | replay decision reaches transactional durable paper persistence |
 | Event-driven backtester | TESTED | production-style replay/strategy/decision/risk/paper contracts, explicit fees/slippage, risk rejection and future-event isolation |
-| Backtest durable continuation | IN_PROGRESS | replay cursor can persist, but full pipeline/paper/equity state is not yet checkpointed; cursor persistence alone is not exactly-once backtest recovery |
+| Backtest durable continuation | TESTED | versioned full-state checkpoint persists replay cursor, closed/open candle state, position/P&L, trades, equity, fees/drawdown and rejection count; fresh backtester resume after a simulated fill exactly matches uninterrupted result |
+| Backtest checkpoint configuration binding | TESTED | checkpoint binds strategy type/ID, interval, requested quantity, starting capital, execution assumptions, risk limits, operational mode and active risk locks; stream/config changes fail closed |
+| Backtest checkpoint file persistence | TESTED | bounded UTF-8 JSON state uses secure temporary file creation, fsync and atomic replace; malformed schema and incomplete-result behavior covered |
 | Backtest core analytics | TESTED | event-time equity curve, total return, max drawdown, trade counts, realized wins/losses, gross P/L and profit factor |
 | Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
@@ -98,12 +102,12 @@ This file is the source of truth for implementation status. Generated code alone
 | ML subsystem | NOT_STARTED | later phase |
 | Next.js frontend | NOT_STARTED | later phase |
 | Paper E2E workflow | TESTED | decision → risk → OMS → paper fill → position → reconciliation plus replay→durable-paper |
-| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay checkpoint file integrity and persisted health-escalation cases covered; broader fault matrix pending |
+| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay/backtest checkpoint integrity and persisted health-escalation cases covered; broader fault matrix pending |
 | Controlled live release | NOT_STARTED | live remains disabled and is not approved |
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `c2a1d524b232a2a40ef068b263e6b8764c9a498f` in GitHub Actions run `36698092866`.
+A green cumulative `main` CI run completed for commit `cf293f519ef4d8c9a9d7aca65f299c68a40f68d6` in GitHub Actions run `36699181111`.
 
 The run passed in one workflow:
 
@@ -119,16 +123,13 @@ The run passed in one workflow:
 
 Validated additions in the current cumulative scope include:
 
-- canonical Dhan daily cash/derivative routing with explicit provider metadata and rollover rejection
-- provider classification metadata migration `0006`
-- deterministic replay checkpoint/resume with strict versioned JSON and stream digest binding
-- atomic bounded local replay-checkpoint file persistence with fresh-process-style restore coverage
-- duplicate provider candle timestamp rejection
-- versioned EMA crossover strategy identity
-- Dhan compact instrument-master parsing and conflict-safe synchronization
-- root-cause fix after CI exposed an unscoped synchronizer query; the corrected implementation queries only incoming security IDs and reports unmatched incoming records deterministically
-- bounded, redirect-free Dhan compact-master retrieval against the official static URL contract using mocked HTTP
-- transactional refresh orchestration that performs network/parse work before opening the DB transaction and then atomically commits synchronization
+- atomic bounded local replay-checkpoint persistence with fresh-process-style restore
+- stateful backtest sessions with versioned full economic checkpoints
+- interrupted-after-fill → serialized checkpoint → fresh backtester → resumed completion producing the exact uninterrupted `BacktestResult`
+- fail-closed backtest restore on changed normalized stream or changed strategy/risk/execution configuration
+- immutable strategy registry with ACTIVE/RETIRED lifecycle and explicit historical resolution
+- strategy-factory revalidation preventing silent strategy identity or minimum-history drift
+- previously validated Dhan provider classification, compact-master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
 ## Important validation boundaries
 
@@ -136,8 +137,9 @@ Validated additions in the current cumulative scope include:
 - The official Dhan compact endpoint is documented as `https://images.dhan.co/api-data/api-scrip-master.csv`; the available external web fetcher could not consume the provider's octet-stream response, so live-transfer success is not claimed.
 - Canonical Upstox/Dhan services are integration-tested against PostgreSQL plus mocked HTTP, not real provider accounts.
 - Provider-master synchronization never auto-creates or symbol-matches canonical instruments; only pre-existing Dhan security-ID links are enriched.
-- Replay checkpoint files persist stream cursor/identity only. They do not make arbitrary processing side effects exactly-once and are not a substitute for transactional execution state.
-- Full backtest process-resume state and a distributed job runner are not yet implemented.
+- Replay-only checkpoint files persist cursor/stream identity; full backtest checkpoints separately persist deterministic research economic state.
+- Backtest checkpointing is local file persistence, not a distributed scheduler/job runner or production research service.
+- Backtest exactly-resumed behavior is validated for the deterministic in-process simulator; it does not imply exactly-once guarantees for arbitrary external side effects.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
 - Backtest results are deterministic research outputs, not profitability claims.
@@ -145,10 +147,10 @@ Validated additions in the current cumulative scope include:
 
 ## Highest-priority work
 
-1. Complete full-state deterministic backtest checkpoint/resume so cursor, pipeline state and simulated economic state move together without duplicate/omitted trades.
-2. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
-3. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
-4. Add broader feature/strategy output versioning and registry/lifecycle semantics before scanner work.
+1. Add additional checkpoint/recovery fault-injection and internal-state consistency checks before introducing any distributed research orchestration.
+2. Add broader versioned feature-output contracts now that strategy registry/lifecycle semantics are explicit.
+3. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
+4. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
 5. Continue SMC only with objective/testable liquidity concepts; add walk-forward/OOS only after dataset boundaries and period semantics are explicit.
 6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
 
