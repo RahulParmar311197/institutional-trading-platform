@@ -25,14 +25,13 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, full-state deterministic backtest checkpoint/resume, internal economic/pipeline consistency validation, atomic failed-restore behavior and interrupted local checkpoint replacement preservation. A fresh backtester restored after an executed simulated fill produces the exact uninterrupted result; changed stream/configuration fails closed.
+Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, full-state deterministic backtest checkpoint/resume, internal economic/pipeline consistency validation, atomic failed-restore behavior, interrupted local checkpoint replacement preservation, and versioned timezone-aware half-open train/validation/test dataset boundaries with UTC-canonical identity and overlap rejection.
 
 Next:
 
-1. Define period semantics before Sharpe/Sortino or annualization.
-2. Add explicit dataset boundaries before walk-forward/OOS tooling.
+1. Define return-period semantics before Sharpe/Sortino or annualization; do not infer frequency from irregular event timestamps.
+2. Add walk-forward/OOS fold generation only on top of the tested dataset-boundary contract and with explicit leakage protections.
 3. Add a scheduler/distributed research job layer only when an actual workflow requires it; do not infer distributed exactly-once semantics from local checkpointing.
-4. Add walk-forward/OOS only after leakage protections remain green.
 
 ## P3 — Deterministic SMC / strategy evolution
 
