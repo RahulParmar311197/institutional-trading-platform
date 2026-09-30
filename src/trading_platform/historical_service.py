@@ -3,7 +3,10 @@ from datetime import date, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from trading_platform.instrument_identifiers import InstrumentIdentifierRepository
+from trading_platform.instrument_identifiers import (
+    InstrumentIdentifierRepository,
+    ProviderInstrumentReference,
+)
 from trading_platform.instruments import Exchange, Instrument, Segment
 from trading_platform.provider_historical import (
     DhanHistoricalClient,
@@ -14,6 +17,9 @@ from trading_platform.provider_historical import (
 
 UPSTOX_PROVIDER = "upstox"
 DHAN_PROVIDER = "dhan"
+_DHAN_DERIVATIVE_EXPIRY_CODES = frozenset({0, 1, 2})
+_DHAN_FUTURE_INSTRUMENT_TYPES = frozenset({"FUTIDX", "FUTSTK"})
+_DHAN_OPTION_INSTRUMENT_TYPES = frozenset({"OPTIDX", "OPTSTK"})
 
 
 class CanonicalInstrumentNotFoundError(LookupError):
@@ -76,6 +82,7 @@ class CanonicalDhanHistoricalService:
         instrument_id: uuid.UUID,
         from_date: date,
         to_date: date,
+        include_open_interest: bool = False,
     ) -> tuple[HistoricalBar, ...]:
         if from_date >= to_date:
             raise ValueError("Dhan daily to_date is non-inclusive and must follow from_date")
@@ -87,33 +94,78 @@ class CanonicalDhanHistoricalService:
                 raise CanonicalInstrumentNotFoundError(
                     f"canonical instrument {instrument_id} does not exist"
                 )
-            exchange_segment, instrument_type = _dhan_cash_classification(instrument)
-            security_id = await InstrumentIdentifierRepository(session).resolve_range(
+            reference = await InstrumentIdentifierRepository(
+                session
+            ).resolve_reference_range(
                 instrument_id=instrument_id,
                 provider=DHAN_PROVIDER,
                 start_date=from_date,
                 end_date=coverage_end,
             )
+            exchange_segment, instrument_type, expiry_code = _dhan_classification(
+                instrument,
+                reference,
+            )
 
         return await self.client.fetch_daily(
-            security_id=security_id,
+            security_id=reference.external_id,
             exchange_segment=exchange_segment,
             instrument=instrument_type,
             from_date=from_date,
             to_date=to_date,
+            expiry_code=expiry_code,
+            include_open_interest=include_open_interest,
         )
 
 
-def _dhan_cash_classification(instrument: Instrument) -> tuple[str, str]:
-    if instrument.segment is not Segment.CASH:
+def _dhan_classification(
+    instrument: Instrument,
+    reference: ProviderInstrumentReference,
+) -> tuple[str, str, int]:
+    if instrument.segment is Segment.CASH:
+        if instrument.exchange is Exchange.NSE:
+            return "NSE_EQ", "EQUITY", 0
+        if instrument.exchange is Exchange.BSE:
+            return "BSE_EQ", "EQUITY", 0
         raise UnsupportedDhanInstrumentError(
-            "canonical Dhan historical service supports cash equities only; "
-            "derivatives require explicit provider instrument classification"
+            f"unsupported Dhan cash exchange: {instrument.exchange.value}"
         )
-    if instrument.exchange is Exchange.NSE:
-        return "NSE_EQ", "EQUITY"
-    if instrument.exchange is Exchange.BSE:
-        return "BSE_EQ", "EQUITY"
-    raise UnsupportedDhanInstrumentError(
-        f"unsupported Dhan cash exchange: {instrument.exchange.value}"
+
+    expected_exchange_segment = {
+        Exchange.NSE: "NSE_FNO",
+        Exchange.BSE: "BSE_FNO",
+    }.get(instrument.exchange)
+    if expected_exchange_segment is None:
+        raise UnsupportedDhanInstrumentError(
+            f"unsupported Dhan derivative exchange: {instrument.exchange.value}"
+        )
+    if reference.exchange_segment != expected_exchange_segment:
+        raise UnsupportedDhanInstrumentError(
+            "Dhan derivative identifier requires explicit exchange segment "
+            f"{expected_exchange_segment}"
+        )
+
+    if instrument.segment is Segment.FUTURES:
+        allowed_types = _DHAN_FUTURE_INSTRUMENT_TYPES
+    elif instrument.segment is Segment.OPTIONS:
+        allowed_types = _DHAN_OPTION_INSTRUMENT_TYPES
+    else:
+        raise UnsupportedDhanInstrumentError(
+            f"unsupported Dhan canonical segment: {instrument.segment.value}"
+        )
+    if reference.instrument_type not in allowed_types:
+        expected = ", ".join(sorted(allowed_types))
+        raise UnsupportedDhanInstrumentError(
+            "Dhan derivative identifier requires explicit instrument type; "
+            f"expected one of {expected}"
+        )
+    if reference.expiry_code not in _DHAN_DERIVATIVE_EXPIRY_CODES:
+        raise UnsupportedDhanInstrumentError(
+            "Dhan derivative identifier requires explicit expiry code 0, 1, or 2"
+        )
+
+    return (
+        expected_exchange_segment,
+        reference.instrument_type,
+        reference.expiry_code,
     )
