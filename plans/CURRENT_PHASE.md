@@ -37,7 +37,8 @@ Research restartability and reproducibility now include:
 - versioned EMA crossover parameter grids with strict Cartesian materialization, canonical ordering, immutable grid identity and factory/strategy identity checks;
 - multi-fold EMA validation-grid orchestration that reuses one grid, selection specification and objective across ordered folds and never accepts test-fold evidence for ranking;
 - grid-search-bound selected+warm OOS execution that binds the exact grid/search evidence to the selected candidate, warm preparation and test result;
-- fold-level EMA grid OOS reporting that retains grid/search/decision/candidate/preparation/result identities per fold and reports arithmetic mean fold return without synthesizing trades or compounding overlapping test windows.
+- fold-level EMA grid OOS reporting that retains grid/search/decision/candidate/preparation/result identities per fold and reports arithmetic mean fold return without synthesizing trades or compounding overlapping test windows;
+- deterministic moving-block bootstrap for already validated regular `PeriodicReturn` series with explicit block length, path count and seed; SHA-256 counter sampling gives runtime-stable block choices, each path has the source length, within-block order is preserved and source/spec/result identities are immutable.
 
 Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
@@ -59,6 +60,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - validation/grid search accepts validation-window evidence only and rejects invalid or duplicate candidate definitions
 - combined selected+warm OOS does not let preparation state change which candidate validation selected
 - grid OOS reports preserve per-fold research identities and do not construct a synthetic cross-fold portfolio path
+- moving-block bootstrap rejects empty/nonregular/noncontiguous return series, impossible simple returns and blocks longer than the source
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -82,6 +84,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - deterministic EMA parameter-grid generation and multi-fold validation-grid search
 - grid/search-bound selected+warm OOS traceability
 - fold-level EMA grid OOS reporting preserving per-fold selection and preparation evidence
+- deterministic moving-block bootstrap over explicit regular return series with stable sampling/result identities
 
 ### Current objective
 
@@ -89,9 +92,9 @@ Continue failure hardening only where a distinct fail-closed invariant is missin
 
 Immediate work:
 
-1. Add automatic fold dataset slicing/orchestration only if it can preserve the existing explicit half-open boundaries and reject missing/extra events rather than silently filtering leakage.
+1. Add automatic fold dataset slicing/orchestration only if a completeness manifest or equivalent contract can preserve the existing explicit half-open boundaries and reject missing/extra events rather than silently filtering leakage.
 2. Define generic fitted/model/feature-state export-import only when a stateful research component actually requires it; the current tested warm path is specifically closed-candle history for stateless strategy evaluation.
-3. Define Monte Carlo semantics before implementation: sampling unit, replacement policy, deterministic seed, path count and which temporal/dependency relationships must remain intact.
+3. Add Monte Carlo summary/diagnostic outputs only with explicit definitions and without interpreting bootstrap path frequencies as calibrated market probabilities; keep the tested resampling contract separate from forecasts.
 4. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
 5. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 6. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
@@ -107,6 +110,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 - representing closed-candle warm-up as arbitrary fitted/model-state restoration
 - test-fold-driven parameter selection or optimizer ranking
 - claiming the EMA-specific grid as a generic optimizer framework
+- interpreting moving-block bootstrap paths as calibrated forecasts or outcome probabilities
 - distributed orchestration without a concrete workload
 - ML-controlled execution
 - profitability claims
