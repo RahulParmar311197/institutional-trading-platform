@@ -9,7 +9,7 @@ from trading_platform.recorded_events import (
     RecordedMarketEvent,
     normalize_recorded_events,
 )
-from trading_platform.replay import ReplayStream
+from trading_platform.replay import ReplayCheckpoint, ReplayStream
 
 INSTRUMENT_ID = uuid.uuid4()
 BASE = datetime(2026, 1, 1, 9, 15, tzinfo=UTC)
@@ -69,6 +69,76 @@ def test_replay_reset_produces_identical_sequence() -> None:
 
     assert first_pass == second_pass
     assert tuple(item.event_id for item in first_pass) == ("1", "2")
+
+
+def test_replay_checkpoint_resumes_exactly_after_consumed_events() -> None:
+    events = [
+        event("3", seconds=2, sequence=3),
+        event("1", seconds=0, sequence=1),
+        event("2", seconds=1, sequence=2),
+    ]
+    first = ReplayStream.from_events(events)
+
+    assert tuple(item.event_id for item in first.step(2)) == ("1", "2")
+    checkpoint = first.checkpoint()
+    uninterrupted_tail = first.step(10)
+
+    resumed = ReplayStream.from_events(events)
+    resumed.restore(checkpoint)
+    resumed_tail = resumed.step(10)
+
+    assert checkpoint.cursor == 2
+    assert checkpoint.event_count == 3
+    assert resumed_tail == uninterrupted_tail
+    assert tuple(item.event_id for item in resumed_tail) == ("3",)
+
+
+def test_replay_checkpoint_rejects_changed_stream_even_with_same_length() -> None:
+    original = ReplayStream.from_events(
+        [
+            event("1", seconds=0, sequence=1, price="100"),
+            event("2", seconds=1, sequence=2, price="101"),
+        ]
+    )
+    original.step(1)
+    checkpoint = original.checkpoint()
+
+    changed = ReplayStream.from_events(
+        [
+            event("1", seconds=0, sequence=1, price="100"),
+            event("2", seconds=1, sequence=2, price="102"),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="stream digest"):
+        changed.restore(checkpoint)
+    assert changed.cursor == 0
+
+
+def test_replay_checkpoint_rejects_different_event_count() -> None:
+    original = ReplayStream.from_events([event("1", seconds=0, sequence=1)])
+    checkpoint = original.checkpoint()
+    expanded = ReplayStream.from_events(
+        [
+            event("1", seconds=0, sequence=1),
+            event("2", seconds=1, sequence=2),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="event count"):
+        expanded.restore(checkpoint)
+    assert expanded.cursor == 0
+
+
+def test_replay_checkpoint_validates_serialized_state() -> None:
+    digest = "0" * 64
+
+    with pytest.raises(ValueError, match="cursor must not exceed"):
+        ReplayCheckpoint(cursor=2, event_count=1, stream_digest=digest)
+    with pytest.raises(ValueError, match="SHA-256"):
+        ReplayCheckpoint(cursor=0, event_count=0, stream_digest="not-a-digest")
+    with pytest.raises(ValueError, match="unsupported"):
+        ReplayCheckpoint(cursor=0, event_count=0, stream_digest=digest, version=2)
 
 
 def test_recorded_event_requires_timezone_aware_timestamps() -> None:
