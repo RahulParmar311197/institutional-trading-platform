@@ -28,6 +28,15 @@ def candle(index: int, *, closed: bool = True) -> Candle:
 TEST_INSTRUMENT_ID = uuid.uuid4()
 
 
+def test_strategy_identity_is_versioned_and_parameter_specific() -> None:
+    first = EmaCrossoverStrategy(fast_period=2, slow_period=3)
+    second = EmaCrossoverStrategy(fast_period=2, slow_period=4)
+
+    assert first.strategy_id == "ema_crossover_v1_2_3"
+    assert second.strategy_id == "ema_crossover_v1_2_4"
+    assert first.strategy_id != second.strategy_id
+
+
 def test_strategy_rejects_open_candle() -> None:
     strategy = EmaCrossoverStrategy(fast_period=2, slow_period=3)
     candles = [candle(0), candle(1), candle(2), candle(3, closed=False)]
