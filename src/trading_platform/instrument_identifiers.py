@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trading_platform.instruments import InstrumentIdentifier
