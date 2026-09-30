@@ -5,43 +5,43 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 ## P0 — Keep main green and harden failure behavior
 
 1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip, Docker build and runtime import smoke green on every `main` change.
-2. Expand replay/provider interruption cases with deterministic restart/resume semantics where required.
-3. Add more persistence/network fault injection around recovery and control-state transitions.
+2. Extend checkpoint/resume into orchestration-level persistence only where long replay/backtest jobs require durable continuation.
+3. Add more persistence/network/provider fault injection around recovery and control-state transitions.
 4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-Already validated in this area: audit-transaction rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, bounded transient provider retries, persistent risk controls, operational health gating and persisted health escalation.
+Already validated in this area: audit-transaction rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, bounded transient provider retries, provider duplicate-timestamp rejection, persistent risk controls, operational health gating, persisted health escalation, and stream-bound versioned replay checkpoints.
 
 ## P1 — Safe external historical service
 
-Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, point/range provider-ID resolution, and a canonical Upstox historical service that rejects rollover-crossing ranges before HTTP.
+Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, point/range provider-ID resolution, canonical Upstox historical service, and canonical Dhan daily NSE/BSE cash service. Identifier rollovers are rejected before HTTP.
 
 Next:
 
-1. Define the canonical metadata required to derive Dhan `exchangeSegment` and `instrument` values without guessing provider classifications.
-2. Implement a canonical Dhan historical service only after that mapping is explicit and regression-tested.
-3. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
-4. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
-5. Do not treat mocked HTTP contract tests as real provider validation.
+1. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
+2. Define explicit canonical/provider metadata for Dhan derivative instrument classification before supporting futures/options; never infer ambiguous provider enums.
+3. Consider canonical Dhan intraday orchestration only after provider-local datetime/session semantics and desired request splitting are explicit.
+4. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
+5. Do not treat mocked HTTP contract/service tests as real provider validation.
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve and core metrics.
+Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, and versioned JSON replay checkpoint/resume bound to normalized event content.
 
 Next:
 
 1. Define period semantics before adding Sharpe/Sortino or annualization.
 2. Add explicit dataset boundaries before walk-forward/OOS tooling.
-3. Add deterministic checkpoint/resume behavior if long replay/backtest runs require continuation.
+3. Add durable checkpoint storage/job orchestration only if long-running research workflows require restart across processes.
 4. Add walk-forward/OOS only after leakage protections remain green.
 
 ## P3 — Deterministic SMC / strategy evolution
 
-Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle and displacement-confirmed MSS.
+Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle, displacement-confirmed MSS, and parameter-specific EMA crossover `v1` strategy identity carried through the existing `strategy_id` contract.
 
 Next:
 
 1. Add selected liquidity concepts only where objective event-time rules can be encoded and regression-tested.
-2. Add feature/strategy output versioning before scanner work.
+2. Add broader feature-output versioning and strategy registry/lifecycle semantics before scanner work.
 3. Add additional indicators only with trusted reference/regression tests.
 4. Keep strategy logic shared across replay/backtest/paper paths.
 
