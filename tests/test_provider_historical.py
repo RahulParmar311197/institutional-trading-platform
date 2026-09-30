@@ -293,8 +293,8 @@ def test_historical_retry_policy_rejects_unsafe_configuration() -> None:
         HistoricalRetryPolicy(max_attempts=11)
     with pytest.raises(ValueError, match="max_delay_seconds"):
         HistoricalRetryPolicy(base_delay_seconds=1, max_delay_seconds=0.5)
-    with pytest.raises(ValueError, match="HTTP error statuses"):
-        HistoricalRetryPolicy(retry_status_codes=frozenset({200}))
+    with pytest.raises(ValueError, match="transient HTTP statuses only"):
+        HistoricalRetryPolicy(retry_status_codes=frozenset({401}))
 
 
 async def test_provider_clients_reject_empty_tokens() -> None:
