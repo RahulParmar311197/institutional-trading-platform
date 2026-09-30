@@ -1,7 +1,7 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 RESEARCH_BOUNDARIES_VERSION = 1
@@ -79,8 +79,8 @@ class ResearchDatasetBoundaries:
 
 def _window_payload(window: ResearchWindow) -> dict[str, str]:
     return {
-        "start": window.start.isoformat(),
-        "end": window.end.isoformat(),
+        "start": window.start.astimezone(UTC).isoformat(),
+        "end": window.end.astimezone(UTC).isoformat(),
     }
 
 
