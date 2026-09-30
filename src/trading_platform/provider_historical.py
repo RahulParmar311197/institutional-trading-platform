@@ -56,10 +56,8 @@ class HistoricalRetryPolicy:
     def delay_for_retry(self, retry_number: int) -> float:
         if retry_number <= 0:
             raise ValueError("retry_number must be positive")
-        return min(
-            self.max_delay_seconds,
-            self.base_delay_seconds * (2 ** (retry_number - 1)),
-        )
+        exponential_delay = self.base_delay_seconds * (2.0 ** (retry_number - 1))
+        return min(self.max_delay_seconds, exponential_delay)
 
 
 class UpstoxHistoricalUnit(StrEnum):
