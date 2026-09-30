@@ -31,7 +31,8 @@ Research restartability and reproducibility now include:
 - deterministic fit/embargo/validation splits wholly inside the parent training window;
 - validation-only backtest result/provenance envelopes and objective-bound scores;
 - deterministic candidate selection with fold/objective/direction binding and stable tie-breaking;
-- selected OOS evaluation that requires the test backtester candidate to match the validation decision before the test fold can run.
+- selected OOS evaluation that requires the test backtester candidate to match the validation decision before the test fold can run;
+- combined selected+warm OOS execution that validates the selected candidate first, then applies compatible train-derived closed-candle history, and binds decision/candidate/preparation/OOS identities in one immutable result.
 
 Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
@@ -51,6 +52,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - research partitions/returns/folds enforce explicit time and leakage boundaries
 - warm OOS imports closed pre-test history only; incomplete train candles are never carried across the boundary
 - validation evidence is restricted to the validation window; selected OOS runs require the exact selected candidate identity
+- combined selected+warm OOS does not let preparation state change which candidate validation selected
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -69,6 +71,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - closed-candle warm-state serialization/restoration and warm OOS execution
 - leakage-safe fit/validation splitting and real validation-backtest evidence
 - objective-bound deterministic validation selection and selection-bound OOS execution
+- combined selected+warm OOS execution with immutable decision/preparation/result identity binding
 
 ### Current objective
 
@@ -76,9 +79,9 @@ Continue failure hardening only where a distinct fail-closed invariant is missin
 
 Immediate work:
 
-1. Define a leakage-safe combined selected+warm OOS contract before parameter search so validation candidate identity, preparation-state identity and test execution are bound in one immutable result path.
+1. Add deterministic parameter-grid/search orchestration on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
 2. Define generic fitted/model/feature-state export-import only when a stateful research component actually requires it; the current tested warm path is specifically closed-candle history for stateless strategy evaluation.
-3. Add parameter-grid/search orchestration only on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
+3. Extend selected/warm OOS aggregate reporting only if per-fold selection-decision and preparation-state identities remain explicit and overlapping folds are never synthesized into one path.
 4. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
 5. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 6. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
