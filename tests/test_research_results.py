@@ -3,12 +3,15 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from test_backtest import make_backtester, sample_events
 
 from trading_platform.replay import ReplayStream
-from trading_platform.research_periods import ResearchWindow, WalkForwardSpec, generate_walk_forward_folds
+from trading_platform.research_periods import (
+    ResearchWindow,
+    WalkForwardSpec,
+    generate_walk_forward_folds,
+)
 from trading_platform.research_results import OOSBacktestResult, OOSProvenance
-
-from test_backtest import make_backtester, sample_events
 
 BASE = datetime(2026, 1, 1, tzinfo=UTC)
 DIGEST_A = "a" * 64
@@ -84,7 +87,7 @@ def test_oos_provenance_can_bind_real_backtest_configuration_and_stream() -> Non
             step=timedelta(days=1),
         ),
     )[0]
-    strategy_id = getattr(backtester.strategy, "strategy_id")
+    strategy_id = backtester.strategy.strategy_id
 
     provenance = OOSProvenance.from_fold(
         boundary_id="research_boundaries_v1_fixture",
