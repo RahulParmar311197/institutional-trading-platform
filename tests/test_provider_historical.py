@@ -7,6 +7,7 @@ import pytest
 
 from trading_platform.provider_historical import (
     DhanHistoricalClient,
+    HistoricalRetryPolicy,
     UpstoxHistoricalClient,
     UpstoxHistoricalUnit,
 )
@@ -186,6 +187,114 @@ async def test_dhan_intraday_request_and_90_day_limit() -> None:
                 from_datetime=datetime(2025, 1, 1, 9, 15),
                 to_datetime=datetime(2025, 1, 1, 9, 15) + timedelta(days=91),
             )
+
+
+async def test_historical_read_retries_transient_status_then_succeeds() -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return httpx.Response(503, json={"error": "temporarily unavailable"})
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"candles": []}},
+        )
+
+    policy = HistoricalRetryPolicy(
+        max_attempts=3,
+        base_delay_seconds=0,
+        max_delay_seconds=0,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        bars = await UpstoxHistoricalClient(
+            access_token="test-token",
+            http_client=http,
+            retry_policy=policy,
+        ).fetch(
+            instrument_key="NSE_EQ|INE848E01016",
+            unit=UpstoxHistoricalUnit.DAYS,
+            interval=1,
+            from_date=date(2025, 1, 1),
+            to_date=date(2025, 1, 2),
+        )
+
+    assert attempts == 3
+    assert bars == ()
+
+
+async def test_historical_read_does_not_retry_auth_failure() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(401, request=request, json={"error": "unauthorized"})
+
+    policy = HistoricalRetryPolicy(
+        max_attempts=3,
+        base_delay_seconds=0,
+        max_delay_seconds=0,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = DhanHistoricalClient(
+            access_token="bad-token",
+            http_client=http,
+            retry_policy=policy,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.fetch_daily(
+                security_id="1333",
+                exchange_segment="NSE_EQ",
+                instrument="EQUITY",
+                from_date=date(2025, 1, 1),
+                to_date=date(2025, 1, 2),
+            )
+
+    assert attempts == 1
+
+
+async def test_historical_read_retries_transport_error_then_raises() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        raise httpx.ConnectError("simulated connection loss", request=request)
+
+    policy = HistoricalRetryPolicy(
+        max_attempts=2,
+        base_delay_seconds=0,
+        max_delay_seconds=0,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = UpstoxHistoricalClient(
+            access_token="test-token",
+            http_client=http,
+            retry_policy=policy,
+        )
+        with pytest.raises(httpx.ConnectError, match="simulated connection loss"):
+            await client.fetch(
+                instrument_key="NSE_EQ|INE848E01016",
+                unit=UpstoxHistoricalUnit.DAYS,
+                interval=1,
+                from_date=date(2025, 1, 1),
+                to_date=date(2025, 1, 2),
+            )
+
+    assert attempts == 2
+
+
+def test_historical_retry_policy_rejects_unsafe_configuration() -> None:
+    with pytest.raises(ValueError, match="positive"):
+        HistoricalRetryPolicy(max_attempts=0)
+    with pytest.raises(ValueError, match="must not exceed 10"):
+        HistoricalRetryPolicy(max_attempts=11)
+    with pytest.raises(ValueError, match="max_delay_seconds"):
+        HistoricalRetryPolicy(base_delay_seconds=1, max_delay_seconds=0.5)
+    with pytest.raises(ValueError, match="HTTP error statuses"):
+        HistoricalRetryPolicy(retry_status_codes=frozenset({200}))
 
 
 async def test_provider_clients_reject_empty_tokens() -> None:
