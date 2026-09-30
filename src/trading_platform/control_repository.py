@@ -19,7 +19,11 @@ class RiskControlRepository:
     @staticmethod
     def _domain_key(scope: KillSwitchScope, storage_key: str) -> str | None:
         if scope is KillSwitchScope.GLOBAL:
+            if storage_key != GLOBAL_STORAGE_KEY:
+                raise ValueError("persisted global risk lock has invalid storage key")
             return None
+        if storage_key == GLOBAL_STORAGE_KEY:
+            raise ValueError("persisted non-global risk lock has invalid storage key")
         return storage_key
 
     async def persist_lock(self, lock: RiskLock) -> None:
@@ -60,18 +64,19 @@ class RiskControlRepository:
     async def persist_mode(self, mode: OperationalMode) -> None:
         record = await self.session.get(OperationalStateRecord, OPERATIONAL_STATE_ID)
         if record is None:
-            self.session.add(OperationalStateRecord(id=OPERATIONAL_STATE_ID, mode=mode.value))
-            return
+            raise RuntimeError("persistent operational state is missing")
         record.mode = mode.value
 
     async def load(self) -> RiskControlBook:
-        book = RiskControlBook()
         operational_state = await self.session.get(
             OperationalStateRecord,
             OPERATIONAL_STATE_ID,
         )
-        if operational_state is not None:
-            book.set_mode(OperationalMode(operational_state.mode))
+        if operational_state is None:
+            raise RuntimeError("persistent operational state is missing")
+
+        book = RiskControlBook()
+        book.set_mode(OperationalMode(operational_state.mode))
 
         result = await self.session.scalars(
             select(RiskLockRecord).where(RiskLockRecord.active.is_(True))
