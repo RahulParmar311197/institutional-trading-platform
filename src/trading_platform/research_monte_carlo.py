@@ -1,6 +1,5 @@
 import hashlib
 import json
-import random
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -106,14 +105,20 @@ def moving_block_bootstrap(
 
     source_values = tuple(item.simple_return for item in returns)
     source_digest = _source_digest(returns, return_period_spec=return_period_spec)
-    rng = random.Random(spec.seed)  # nosec B311 - deterministic research resampling, not crypto
     max_start = len(source_values) - spec.block_length
     paths: list[BootstrapPath] = []
     for path_index in range(spec.path_count):
         sampled: list[Decimal] = []
+        block_index = 0
         while len(sampled) < len(source_values):
-            start = rng.randint(0, max_start)  # nosec B311
+            start = _sample_index(
+                seed=spec.seed,
+                path_index=path_index,
+                block_index=block_index,
+                upper_inclusive=max_start,
+            )
             sampled.extend(source_values[start : start + spec.block_length])
+            block_index += 1
         paths.append(
             BootstrapPath(
                 index=path_index,
@@ -127,6 +132,22 @@ def moving_block_bootstrap(
         source_digest=source_digest,
         paths=tuple(paths),
     )
+
+
+def _sample_index(
+    *,
+    seed: int,
+    path_index: int,
+    block_index: int,
+    upper_inclusive: int,
+) -> int:
+    if upper_inclusive < 0:
+        raise ValueError("upper_inclusive must be non-negative")
+    if upper_inclusive == 0:
+        return 0
+    payload = f"{seed}:{path_index}:{block_index}".encode("ascii")
+    value = int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
+    return value % (upper_inclusive + 1)
 
 
 def _validate_return_series(
