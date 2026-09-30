@@ -24,13 +24,13 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, combined selected+warm OOS execution, deterministic explicit-candidate validation search, deterministic EMA parameter-grid materialization, multi-fold validation-grid search, grid/search-bound selected+warm OOS execution, and fold-level grid OOS reporting. Pending source-window candles are excluded from warm transfer; validation/grid search accepts validation-window evidence only; test-fold results never participate in candidate ranking; grid OOS reports preserve grid/search/decision/candidate/preparation/result identities without synthesizing a cross-fold portfolio path.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, combined selected+warm OOS execution, deterministic explicit-candidate validation search, deterministic EMA parameter-grid materialization, multi-fold validation-grid search, grid/search-bound selected+warm OOS execution, fold-level grid OOS reporting, and deterministic moving-block bootstrap over regular return series. Pending source-window candles are excluded from warm transfer; validation/grid search accepts validation-window evidence only; test-fold results never participate in candidate ranking; grid OOS reports preserve grid/search/decision/candidate/preparation/result identities without synthesizing a cross-fold portfolio path; bootstrap source/spec/result identities are deterministic and within-block return order is preserved.
 
 Next:
 
-1. Add automatic fold dataset slicing/orchestration only if it preserves explicit half-open train/validation/test boundaries and fails closed on missing, duplicate or out-of-window evidence rather than silently filtering it.
+1. Add automatic fold dataset slicing/orchestration only if a completeness manifest or equivalent contract can preserve explicit half-open train/validation/test boundaries and fail closed on missing, duplicate or out-of-window evidence rather than silently filtering it.
 2. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
-3. Define Monte Carlo semantics before implementation: sampling unit, replacement policy, deterministic seed, path count and which temporal/dependency relationships must remain intact.
+3. Add Monte Carlo summary/diagnostic outputs only with explicit definitions; do not interpret moving-block bootstrap path frequencies as calibrated probabilities or forecasts.
 4. Generalize parameter-grid orchestration beyond EMA only when a second concrete parameterized strategy requires it; do not build a generic optimizer abstraction prematurely.
 5. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
@@ -58,7 +58,7 @@ Next:
 ## Later
 
 - generic fitted/model-state execution when a concrete stateful component requires it
-- Monte Carlo after explicit resampling semantics
+- broader Monte Carlo diagnostics after explicit statistical definitions
 - generic parameter-grid abstractions only when multiple real strategies justify them
 - distributed research orchestration when justified by workload
 - options engine
