@@ -13,12 +13,12 @@ Already validated in this area: audit-transaction rollback, duplicate-fill rollb
 
 ## P1 — Safe external historical service
 
-Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, and dated provider-ID resolution.
+Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, point/range provider-ID resolution, and a canonical Upstox historical service that rejects rollover-crossing ranges before HTTP.
 
 Next:
 
-1. Add a service that resolves a canonical instrument to a provider ID for the requested historical interval.
-2. Reject or explicitly split requests that cross provider-identifier validity boundaries; never guess which ID applies.
+1. Define the canonical metadata required to derive Dhan `exchangeSegment` and `instrument` values without guessing provider classifications.
+2. Implement a canonical Dhan historical service only after that mapping is explicit and regression-tested.
 3. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
 4. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
 5. Do not treat mocked HTTP contract tests as real provider validation.
