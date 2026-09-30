@@ -5,7 +5,20 @@ import pytest
 from test_backtest import BASE, event, make_backtester, sample_events
 
 from trading_platform.research_periods import ResearchWindow, WalkForwardFold
-from trading_platform.walk_forward import evaluate_fixed_strategy_oos_fold
+from trading_platform.research_selection import (
+    SelectionSpec,
+    select_validation_candidate,
+    split_fold_for_selection,
+)
+from trading_platform.research_validation import (
+    ValidationObjective,
+    evaluate_fixed_strategy_validation_fold,
+    score_validation_result,
+)
+from trading_platform.walk_forward import (
+    evaluate_fixed_strategy_oos_fold,
+    evaluate_selected_strategy_oos_fold,
+)
 
 BOUNDARY_ID = "research_boundaries_v1_fixture"
 FEATURE_IDS = ("market_regime_v1_fixture",)
@@ -23,6 +36,16 @@ def fold() -> WalkForwardFold:
             end=BASE + timedelta(minutes=5),
         ),
         spec_id="walk_forward_v1_fixture",
+    )
+
+
+def shifted_event(event_id: str, minute: int):
+    timestamp = BASE + timedelta(minutes=minute)
+    return replace(
+        event(event_id, 0, "100"),
+        exchange_timestamp=timestamp,
+        provider_timestamp=timestamp,
+        ingestion_timestamp=timestamp,
     )
 
 
@@ -106,4 +129,86 @@ def test_fixed_strategy_oos_fold_rejects_empty_input() -> None:
             [],
             boundary_id=BOUNDARY_ID,
             fold=fold(),
+        )
+
+
+def test_validation_selection_is_bound_before_oos_test_evaluation() -> None:
+    current_fold = fold()
+    selection = split_fold_for_selection(
+        current_fold,
+        spec=SelectionSpec(validation_length=timedelta(minutes=3)),
+    )
+    backtester = make_backtester()
+    validation = evaluate_fixed_strategy_validation_fold(
+        backtester,
+        [
+            shifted_event("validation-a", -4),
+            shifted_event("validation-b", -3),
+            shifted_event("validation-c", -2),
+        ],
+        boundary_id=BOUNDARY_ID,
+        selection_fold=selection,
+        feature_ids=FEATURE_IDS,
+    )
+    score = score_validation_result(
+        validation,
+        objective=ValidationObjective.TOTAL_RETURN,
+    )
+    decision = select_validation_candidate(
+        selection,
+        objective_id=score.objective_id,
+        direction=score.direction,
+        candidates=(score,),
+    )
+
+    selected = evaluate_selected_strategy_oos_fold(
+        backtester,
+        sample_events(),
+        boundary_id=BOUNDARY_ID,
+        fold=current_fold,
+        selection_fold=selection,
+        decision=decision,
+        feature_ids=FEATURE_IDS,
+    )
+
+    assert selected.selection_decision_id == decision.decision_id
+    assert selected.candidate_id == decision.selected_candidate_id
+    assert selected.oos.provenance.fold_id == current_fold.fold_id
+    assert selected.result_id.startswith("selected_oos_v1_")
+
+
+def test_selected_oos_rejects_unselected_candidate_configuration() -> None:
+    current_fold = fold()
+    selection = split_fold_for_selection(
+        current_fold,
+        spec=SelectionSpec(validation_length=timedelta(minutes=3)),
+    )
+    backtester = make_backtester()
+    validation = evaluate_fixed_strategy_validation_fold(
+        backtester,
+        [shifted_event("validation", -2)],
+        boundary_id=BOUNDARY_ID,
+        selection_fold=selection,
+        feature_ids=FEATURE_IDS,
+    )
+    score = score_validation_result(
+        validation,
+        objective=ValidationObjective.TOTAL_RETURN,
+    )
+    decision = select_validation_candidate(
+        selection,
+        objective_id=score.objective_id,
+        direction=score.direction,
+        candidates=(score,),
+    )
+
+    with pytest.raises(ValueError, match="does not match selected validation candidate"):
+        evaluate_selected_strategy_oos_fold(
+            backtester,
+            sample_events(),
+            boundary_id=BOUNDARY_ID,
+            fold=current_fold,
+            selection_fold=selection,
+            decision=decision,
+            feature_ids=("different-feature",),
         )
