@@ -5,10 +5,11 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 ## P0 — Keep main green and harden failure behavior
 
 1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip, Docker build and runtime import smoke green on every `main` change.
-2. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first make initialization-vs-corruption semantics explicit where missing persisted state is currently valid first-run behavior.
-3. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
+2. Continue persisted-control/recovery fault injection now that migration `0007` makes first-run initialization explicit: add malformed mode/scope and unavailable-database load/transition coverage where it exercises a distinct safety boundary.
+3. Continue persistence/network/provider failure injection where a real fail-closed invariant is missing; do not add synthetic failure tests that duplicate existing behavior.
+4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-Already validated: audit rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, transient provider retries, duplicate-provider-bar rejection, persistent controls/health escalation, stream-bound replay checkpoint integrity, atomic replay checkpoint files, full-state backtest checkpoint/resume, schema-valid checkpoint economic/pipeline consistency validation, atomic in-memory restore failure, interrupted checkpoint replacement preserving the last good file, Dhan master conflict safety, bounded master retrieval and transactional refresh.
+Already validated: audit rollback, duplicate-fill rollback, database-unavailable durable execution behavior, transient provider retries, duplicate-provider-bar rejection, persisted controls/health escalation, migration-backed operational-state initialization, missing/corrupt control-state rejection, replay/backtest checkpoint integrity/atomicity, interrupted checkpoint replacement preservation, Dhan master conflict safety, bounded master retrieval and transactional refresh.
 
 ## P1 — Safe external historical/provider evidence
 
@@ -21,34 +22,34 @@ Next:
 3. Add optional authenticated historical-provider smoke tests only when credentials/entitlements are securely supplied at runtime.
 4. Consider canonical Dhan intraday orchestration only after provider-local datetime/session semantics and request splitting are explicit.
 5. Keep provider raw evidence distinct from normalized candles and preserve provenance.
-6. Do not treat mocked HTTP/service tests as real provider validation.
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, full-state deterministic backtest checkpoint/resume, internal economic/pipeline consistency validation, atomic failed-restore behavior, interrupted local checkpoint replacement preservation, versioned timezone-aware half-open train/validation/test dataset boundaries with UTC-canonical identity/overlap rejection, explicit regular return-period semantics that reject irregular sampling and never infer annualization, deterministic rolling walk-forward fold generation with optional embargo/exact step/full-fold-only emission plus deterministic fold identity, versioned OOS provenance/result identities binding data/strategy/features/execution assumptions, and explicit Sharpe/Sortino conventions with mandatory `periods_per_year`.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, and fixed-strategy cold-start test-fold evaluation that rejects train/out-of-window event leakage.
 
 Next:
 
-1. Add walk-forward strategy evaluation that consumes exact folds and creates OOS provenance/result envelopes without parameter-selection or ranking shortcuts.
-2. Keep training/test data isolation explicit; never let test-fold outcomes influence configuration used to evaluate that fold.
-3. Add aggregate walk-forward reporting only after per-fold result provenance is immutable and aggregation semantics are explicit.
-4. Add Monte Carlo only after its sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
-5. Add a scheduler/distributed research job layer only when an actual workflow requires it; do not infer distributed exactly-once semantics from local checkpointing.
+1. Define aggregate walk-forward reporting compatibility/order semantics over immutable per-fold OOS result identities, then implement reporting without ranking or parameter selection.
+2. Keep training/test data isolation explicit; never let a test-fold outcome influence configuration used to evaluate that fold.
+3. Define warm-up/fitted-state provenance before allowing any training-window-derived state into OOS evaluation. The current evaluator is intentionally cold-start/test-only.
+4. Add optimizer/parameter search only after a separate selection/validation contract prevents test-fold leakage.
+5. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
+6. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
 ## P3 — Deterministic SMC / strategy evolution
 
-Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle, displacement-confirmed MSS, parameter-specific EMA crossover `v1` identity, an immutable strategy registry with ACTIVE/RETIRED lifecycle plus historical retired-version resolution, and versioned parameter-specific regime feature outputs carrying instrument/event-time provenance.
+Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle, displacement-confirmed MSS, parameter-specific EMA crossover `v1` identity, immutable strategy registry lifecycle, and versioned parameter-specific regime feature outputs carrying instrument/event-time provenance.
 
 Next:
 
-1. Extend versioned feature-output contracts to the next derived feature only when its reproducibility boundary is explicit; avoid premature generic framework abstraction.
+1. Extend versioned feature-output contracts only when the next derived feature has an explicit event-time/reproducibility boundary; avoid premature generic framework abstraction.
 2. Add selected liquidity concepts only where objective event-time rules can be regression-tested.
 3. Add additional strategies/indicators only with trusted reference/regression tests and immutable version identity.
 4. Keep strategy logic shared across replay/backtest/paper paths.
 
 ## P4 — Trading safety before any real order path
 
-Already validated: kill switches, READ_ONLY/CLOSE_ONLY/HALTED modes, persisted/recovered controls, health escalation, reconciliation/recovery and a deny-by-default live-gate policy.
+Already validated: kill switches, READ_ONLY/CLOSE_ONLY/HALTED modes, migration-backed persisted/recovered controls, health escalation, reconciliation/recovery and a deny-by-default live-gate policy.
 
 Next:
 
@@ -58,7 +59,7 @@ Next:
 
 ## Later
 
-- walk-forward optimization/parameter search after leakage-safe evaluation exists
+- walk-forward optimization/parameter search after leakage-safe aggregation/selection contracts
 - Monte Carlo
 - distributed research orchestration when justified by workload
 - options engine
