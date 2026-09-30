@@ -1,10 +1,11 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 RESEARCH_BOUNDARIES_VERSION = 1
+WALK_FORWARD_SPEC_VERSION = 1
 
 
 class DatasetPartition(StrEnum):
@@ -77,11 +78,92 @@ class ResearchDatasetBoundaries:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class WalkForwardSpec:
+    train_length: timedelta
+    test_length: timedelta
+    step: timedelta
+    embargo: timedelta = timedelta(0)
+    version: int = WALK_FORWARD_SPEC_VERSION
+
+    def __post_init__(self) -> None:
+        if self.version != WALK_FORWARD_SPEC_VERSION:
+            raise ValueError("unsupported walk-forward specification version")
+        if self.train_length <= timedelta(0):
+            raise ValueError("train_length must be positive")
+        if self.test_length <= timedelta(0):
+            raise ValueError("test_length must be positive")
+        if self.step <= timedelta(0):
+            raise ValueError("step must be positive")
+        if self.embargo < timedelta(0):
+            raise ValueError("embargo must be non-negative")
+
+    @property
+    def spec_id(self) -> str:
+        return (
+            f"walk_forward_v{self.version}_"
+            f"train{_timedelta_microseconds(self.train_length)}_"
+            f"test{_timedelta_microseconds(self.test_length)}_"
+            f"step{_timedelta_microseconds(self.step)}_"
+            f"embargo{_timedelta_microseconds(self.embargo)}"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WalkForwardFold:
+    index: int
+    train: ResearchWindow
+    test: ResearchWindow
+    spec_id: str
+
+    def __post_init__(self) -> None:
+        if self.index < 0:
+            raise ValueError("fold index must be non-negative")
+        if not self.spec_id:
+            raise ValueError("spec_id must not be empty")
+        if self.train.end > self.test.start:
+            raise ValueError("walk-forward train and test windows must not overlap")
+
+
+
+def generate_walk_forward_folds(
+    universe: ResearchWindow,
+    *,
+    spec: WalkForwardSpec,
+) -> tuple[WalkForwardFold, ...]:
+    folds: list[WalkForwardFold] = []
+    train_start = universe.start
+    index = 0
+
+    while True:
+        train_end = train_start + spec.train_length
+        test_start = train_end + spec.embargo
+        test_end = test_start + spec.test_length
+        if test_end > universe.end:
+            break
+        folds.append(
+            WalkForwardFold(
+                index=index,
+                train=ResearchWindow(start=train_start, end=train_end),
+                test=ResearchWindow(start=test_start, end=test_end),
+                spec_id=spec.spec_id,
+            )
+        )
+        train_start += spec.step
+        index += 1
+
+    return tuple(folds)
+
+
 def _window_payload(window: ResearchWindow) -> dict[str, str]:
     return {
         "start": window.start.astimezone(UTC).isoformat(),
         "end": window.end.astimezone(UTC).isoformat(),
     }
+
+
+def _timedelta_microseconds(value: timedelta) -> int:
+    return (value.days * 86_400 + value.seconds) * 1_000_000 + value.microseconds
 
 
 def _require_aware(timestamp: datetime, name: str) -> None:
