@@ -3,12 +3,16 @@ import io
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trading_platform.instruments import InstrumentIdentifier
 
 DHAN_PROVIDER = "dhan"
+DHAN_COMPACT_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
+_DEFAULT_MASTER_MAX_BYTES = 32 * 1024 * 1024
+_DEFAULT_MASTER_TIMEOUT_SECONDS = 15.0
 _REQUIRED_COMPACT_COLUMNS = frozenset(
     {
         "SEM_SMST_SECURITY_ID",
@@ -45,6 +49,72 @@ class DhanInstrumentMasterSyncResult:
     updated: int
     unchanged: int
     unmatched_records: int
+
+
+class DhanCompactMasterFetcher:
+    def __init__(
+        self,
+        *,
+        http_client: httpx.AsyncClient,
+        max_bytes: int = _DEFAULT_MASTER_MAX_BYTES,
+        timeout_seconds: float = _DEFAULT_MASTER_TIMEOUT_SECONDS,
+    ) -> None:
+        if max_bytes <= 0:
+            raise ValueError("max_bytes must be positive")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self._http = http_client
+        self._max_bytes = max_bytes
+        self._timeout_seconds = timeout_seconds
+
+    async def fetch_text(self) -> str:
+        chunks: list[bytes] = []
+        received = 0
+        async with self._http.stream(
+            "GET",
+            DHAN_COMPACT_MASTER_URL,
+            headers={"Accept": "text/csv,*/*;q=0.1"},
+            follow_redirects=False,
+            timeout=self._timeout_seconds,
+        ) as response:
+            if 300 <= response.status_code < 400:
+                raise DhanInstrumentMasterError(
+                    "Dhan compact master endpoint redirected unexpectedly"
+                )
+            response.raise_for_status()
+
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None:
+                try:
+                    declared_size = int(content_length)
+                except ValueError as exc:
+                    raise DhanInstrumentMasterError(
+                        "Dhan compact master returned invalid Content-Length"
+                    ) from exc
+                if declared_size < 0 or declared_size > self._max_bytes:
+                    raise DhanInstrumentMasterError(
+                        "Dhan compact master exceeds configured maximum size"
+                    )
+
+            async for chunk in response.aiter_bytes():
+                received += len(chunk)
+                if received > self._max_bytes:
+                    raise DhanInstrumentMasterError(
+                        "Dhan compact master exceeds configured maximum size"
+                    )
+                chunks.append(chunk)
+
+        if received == 0:
+            raise DhanInstrumentMasterError("Dhan compact master response is empty")
+        try:
+            return b"".join(chunks).decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise DhanInstrumentMasterError(
+                "Dhan compact master is not valid UTF-8 CSV"
+            ) from exc
+
+    async def fetch_records(self) -> tuple[DhanInstrumentMasterRecord, ...]:
+        return parse_dhan_compact_instrument_master(await self.fetch_text())
 
 
 def parse_dhan_compact_instrument_master(
