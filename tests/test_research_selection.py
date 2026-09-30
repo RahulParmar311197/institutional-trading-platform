@@ -30,6 +30,25 @@ def fold() -> WalkForwardFold:
     )
 
 
+def score(
+    *,
+    selection_fold_id: str,
+    candidate_id: str,
+    result_id: str,
+    value: str,
+    objective_id: str = "mean_return_v1",
+    direction: ObjectiveDirection = ObjectiveDirection.MAXIMIZE,
+) -> ValidationCandidateScore:
+    return ValidationCandidateScore(
+        selection_fold_id=selection_fold_id,
+        candidate_id=candidate_id,
+        validation_result_id=result_id,
+        objective_id=objective_id,
+        direction=direction,
+        score=Decimal(value),
+    )
+
+
 def test_selection_split_keeps_validation_inside_parent_train_and_test_untouched() -> None:
     current_fold = fold()
     selection = split_fold_for_selection(
@@ -67,23 +86,23 @@ def test_selection_uses_validation_scores_only_with_deterministic_tie_break() ->
         spec=SelectionSpec(validation_length=timedelta(days=2)),
     )
     candidates = (
-        ValidationCandidateScore(
+        score(
             selection_fold_id=selection.selection_fold_id,
             candidate_id="strategy.z",
-            validation_result_id="validation-z",
-            score=Decimal("1.25"),
+            result_id="validation-z",
+            value="1.25",
         ),
-        ValidationCandidateScore(
+        score(
             selection_fold_id=selection.selection_fold_id,
             candidate_id="strategy.a",
-            validation_result_id="validation-a",
-            score=Decimal("1.25"),
+            result_id="validation-a",
+            value="1.25",
         ),
-        ValidationCandidateScore(
+        score(
             selection_fold_id=selection.selection_fold_id,
             candidate_id="strategy.b",
-            validation_result_id="validation-b",
-            score=Decimal("0.80"),
+            result_id="validation-b",
+            value="0.80",
         ),
     )
 
@@ -93,11 +112,19 @@ def test_selection_uses_validation_scores_only_with_deterministic_tie_break() ->
         direction=ObjectiveDirection.MAXIMIZE,
         candidates=candidates,
     )
+    minimize_candidates = tuple(
+        replace(
+            candidate,
+            objective_id="drawdown_v1",
+            direction=ObjectiveDirection.MINIMIZE,
+        )
+        for candidate in candidates
+    )
     minimize = select_validation_candidate(
         selection,
         objective_id="drawdown_v1",
         direction=ObjectiveDirection.MINIMIZE,
-        candidates=candidates,
+        candidates=minimize_candidates,
     )
 
     assert maximize.selected_candidate_id == "strategy.a"
@@ -110,16 +137,16 @@ def test_selection_uses_validation_scores_only_with_deterministic_tie_break() ->
     ).decision_id
 
 
-def test_selection_rejects_scores_from_another_fold() -> None:
+def test_selection_rejects_scores_from_another_fold_or_objective() -> None:
     selection = split_fold_for_selection(
         fold(),
         spec=SelectionSpec(validation_length=timedelta(days=2)),
     )
-    candidate = ValidationCandidateScore(
+    candidate = score(
         selection_fold_id="selection_fold_other",
         candidate_id="strategy.a",
-        validation_result_id="validation-a",
-        score=Decimal("1"),
+        result_id="validation-a",
+        value="1",
     )
 
     with pytest.raises(ValueError, match="different selection fold"):
@@ -130,17 +157,34 @@ def test_selection_rejects_scores_from_another_fold() -> None:
             candidates=(candidate,),
         )
 
+    current_fold_candidate = replace(candidate, selection_fold_id=selection.selection_fold_id)
+    with pytest.raises(ValueError, match="different objective"):
+        select_validation_candidate(
+            selection,
+            objective_id="drawdown_v1",
+            direction=ObjectiveDirection.MAXIMIZE,
+            candidates=(current_fold_candidate,),
+        )
+
+    with pytest.raises(ValueError, match="different objective direction"):
+        select_validation_candidate(
+            selection,
+            objective_id="mean_return_v1",
+            direction=ObjectiveDirection.MINIMIZE,
+            candidates=(current_fold_candidate,),
+        )
+
 
 def test_selection_rejects_duplicate_or_nonfinite_validation_evidence() -> None:
     selection = split_fold_for_selection(
         fold(),
         spec=SelectionSpec(validation_length=timedelta(days=2)),
     )
-    candidate = ValidationCandidateScore(
+    candidate = score(
         selection_fold_id=selection.selection_fold_id,
         candidate_id="strategy.a",
-        validation_result_id="validation-a",
-        score=Decimal("1"),
+        result_id="validation-a",
+        value="1",
     )
 
     with pytest.raises(ValueError, match="finite"):
