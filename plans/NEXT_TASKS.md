@@ -25,14 +25,15 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, full-state deterministic backtest checkpoint/resume, internal economic/pipeline consistency validation, atomic failed-restore behavior, interrupted local checkpoint replacement preservation, versioned timezone-aware half-open train/validation/test dataset boundaries with UTC-canonical identity/overlap rejection, explicit regular return-period semantics that reject irregular sampling and never infer annualization, and deterministic rolling walk-forward fold generation with optional embargo, exact step size and no truncated final fold.
+Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, full-state deterministic backtest checkpoint/resume, internal economic/pipeline consistency validation, atomic failed-restore behavior, interrupted local checkpoint replacement preservation, versioned timezone-aware half-open train/validation/test dataset boundaries with UTC-canonical identity/overlap rejection, explicit regular return-period semantics that reject irregular sampling and never infer annualization, deterministic rolling walk-forward fold generation with optional embargo/exact step/full-fold-only emission plus deterministic fold identity, versioned OOS provenance/result identities binding data/strategy/features/execution assumptions, and explicit Sharpe/Sortino conventions with mandatory `periods_per_year`.
 
 Next:
 
-1. Define OOS evaluation/result contracts that preserve fold/spec/boundary identity without adding parameter selection or optimization shortcuts.
-2. Add Sharpe/Sortino or annualized metrics only after their exact population/sample conventions and explicit `periods_per_year` usage are documented and tested.
-3. Add walk-forward strategy evaluation only after result provenance can bind strategy ID, feature IDs, dataset boundary/fold identity and execution assumptions.
-4. Add a scheduler/distributed research job layer only when an actual workflow requires it; do not infer distributed exactly-once semantics from local checkpointing.
+1. Add walk-forward strategy evaluation that consumes exact folds and creates OOS provenance/result envelopes without parameter-selection or ranking shortcuts.
+2. Keep training/test data isolation explicit; never let test-fold outcomes influence configuration used to evaluate that fold.
+3. Add aggregate walk-forward reporting only after per-fold result provenance is immutable and aggregation semantics are explicit.
+4. Add Monte Carlo only after its sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
+5. Add a scheduler/distributed research job layer only when an actual workflow requires it; do not infer distributed exactly-once semantics from local checkpointing.
 
 ## P3 — Deterministic SMC / strategy evolution
 
@@ -57,7 +58,7 @@ Next:
 
 ## Later
 
-- walk-forward/OOS evaluation/optimization beyond deterministic fold construction
+- walk-forward optimization/parameter search after leakage-safe evaluation exists
 - Monte Carlo
 - distributed research orchestration when justified by workload
 - options engine
