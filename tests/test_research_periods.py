@@ -115,6 +115,32 @@ def test_walk_forward_folds_are_rolling_half_open_and_deterministic() -> None:
     ]
     assert [fold.index for fold in folds] == [0, 1, 2]
     assert {fold.spec_id for fold in folds} == {spec.spec_id}
+    assert len({fold.fold_id for fold in folds}) == 3
+    assert all(fold.fold_id.startswith("walk_forward_fold_") for fold in folds)
+
+
+def test_walk_forward_fold_identity_is_timezone_canonical() -> None:
+    spec = WalkForwardSpec(
+        train_length=timedelta(days=5),
+        test_length=timedelta(days=2),
+        step=timedelta(days=1),
+    )
+    fold = generate_walk_forward_folds(window(0, 7), spec=spec)[0]
+    plus_one = timezone(timedelta(hours=1))
+    shifted = type(fold)(
+        index=fold.index,
+        train=ResearchWindow(
+            start=fold.train.start.astimezone(plus_one),
+            end=fold.train.end.astimezone(plus_one),
+        ),
+        test=ResearchWindow(
+            start=fold.test.start.astimezone(plus_one),
+            end=fold.test.end.astimezone(plus_one),
+        ),
+        spec_id=fold.spec_id,
+    )
+
+    assert fold.fold_id == shifted.fold_id
 
 
 def test_walk_forward_embargo_separates_training_and_test_data() -> None:
