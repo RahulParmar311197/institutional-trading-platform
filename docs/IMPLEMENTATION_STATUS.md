@@ -8,7 +8,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 - `NOT_STARTED` — no implementation exists.
 - `IN_PROGRESS` — implementation is partial or required validation remains incomplete.
-- `IMPLEMENTED_UNVERIFIED` — implementation exists but its required validation has not passed.
+- `IMPLEMENTED_UNVERIFIED` — implementation exists but required real-context validation has not passed.
 - `TESTED` — required automated validation has passed for the stated scope.
 - `BLOCKED` — progress requires a named external dependency or decision.
 - `PRODUCTION_VALIDATED` — validated in the intended production-like environment; CI alone cannot establish this.
@@ -34,11 +34,15 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36696142851` completed successfully |
+| CI | TESTED | cumulative `main` run `36696837812` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
-| Dhan compact master parser/synchronizer | TESTED | documented compact fields are parsed with strict enum/expiry validation; synchronization is scoped to incoming security IDs, updates only existing Dhan links, pre-validates conflicts before mutation and never creates canonical instruments by symbol guess |
+| Dhan compact-master parser | TESTED | documented compact fields are parsed with strict exchange/segment/instrument/expiry validation and duplicate-security-ID conflict detection |
+| Dhan master synchronizer | TESTED | synchronization is scoped to incoming security IDs, updates only existing Dhan links, fills missing metadata only, pre-validates all conflicts before mutation and never creates canonical instruments by symbol guess |
+| Dhan compact-master retrieval boundary | TESTED | exact official compact URL is pinned, redirects disabled, timeout and byte cap enforced, response streamed, UTF-8/BOM handled; HTTP behavior validated with `httpx.MockTransport` |
+| Dhan transactional master refresh | TESTED | fetch/parse completes before opening the PostgreSQL transaction; conflict-safe synchronization commits atomically and persistence is verified from a fresh session using mocked HTTP + real PostgreSQL |
+| Real Dhan compact-master transfer | IMPLEMENTED_UNVERIFIED | retrieval code exists, but no successful live octet-stream transfer has been validated in this environment |
 | Recorded market events | TESTED | provider-neutral recorded trade envelope, timestamps, ordering, dedupe/conflict checks |
 | Recorded JSONL ingestion | TESTED | Decimal/timestamp round-trip, normalization and malformed-input rejection |
 | Provider-neutral historical source | TESTED | local JSONL source, filtering and multi-source normalization |
@@ -51,7 +55,6 @@ This file is the source of truth for implementation status. Generated code alone
 | Canonical Dhan daily cash service | TESTED | canonical NSE/BSE cash instrument→full-range Dhan security ID→explicit cash classification→daily client; rollover fails before HTTP |
 | Canonical Dhan daily derivatives | TESTED | FUTIDX/FUTSTK/OPTIDX/OPTSTK require explicit persisted NSE/BSE F&O segment, instrument type and expiry code; missing/mismatched metadata fails before HTTP |
 | Authenticated external historical ingestion | IN_PROGRESS | client/service contracts exist; no real credentialed provider call has been claimed or validated |
-| Live provider-master retrieval | NOT_STARTED | compact-master parser/synchronizer is tested with fixtures and PostgreSQL; no live Dhan CSV download has been claimed or validated |
 | Historical read retry policy | TESTED | bounded retry for transport errors and transient HTTP statuses; auth/client errors do not retry |
 | Live market data | NOT_STARTED | provider WebSocket ingestion pending |
 | Data quality | TESTED | stale/crossed/future/non-positive quotes plus historical OHLC/duplicate-timestamp checks covered |
@@ -93,12 +96,12 @@ This file is the source of truth for implementation status. Generated code alone
 | ML subsystem | NOT_STARTED | later phase |
 | Next.js frontend | NOT_STARTED | later phase |
 | Paper E2E workflow | TESTED | decision → risk → OMS → paper fill → position → reconciliation plus replay→durable-paper |
-| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, provider-response uniqueness, replay checkpoint integrity and persisted health-escalation cases covered; broader fault matrix pending |
+| Failure/security validation | IN_PROGRESS | Bandit green; rollback, DB-unavailable, restart, transient provider failure, master-sync conflict safety, bounded master retrieval, provider-response uniqueness, replay checkpoint integrity and persisted health-escalation cases covered; broader fault matrix pending |
 | Controlled live release | NOT_STARTED | live remains disabled and is not approved |
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `f7ac7cde283599fc358817d02ed098f7aff6eebc` in GitHub Actions run `36696142851`.
+A green cumulative `main` CI run completed for commit `d12eb01ba11f1ea1a8f67282e5e75eb48878f64a` in GitHub Actions run `36696837812`.
 
 The run passed in one workflow:
 
@@ -114,22 +117,22 @@ The run passed in one workflow:
 
 Validated additions in this turn include:
 
-- canonical Dhan daily cash and derivative services with explicit provider classification and rollover rejection
+- canonical Dhan daily cash/derivative routing with explicit provider metadata and rollover rejection
 - provider classification metadata migration `0006`
 - deterministic replay checkpoint/resume with strict versioned JSON and stream digest binding
 - duplicate provider candle timestamp rejection
 - versioned EMA crossover strategy identity
-- Dhan compact instrument-master parsing for supported NSE/BSE equity/F&O rows
-- conflict-safe Dhan master synchronization that fills missing metadata only on existing security-ID links
-- a root-cause fix after CI exposed that the first synchronizer scanned unrelated Dhan identifiers; the corrected implementation scopes lookup to incoming security IDs and reports unmatched incoming records deterministically
+- Dhan compact instrument-master parsing and conflict-safe synchronization
+- root-cause fix after CI exposed an unscoped synchronizer query; the corrected implementation queries only incoming security IDs and reports unmatched incoming records deterministically
+- bounded, redirect-free Dhan compact-master retrieval against the official static URL contract using mocked HTTP
+- transactional refresh orchestration that performs network/parse work before opening the DB transaction and then atomically commits synchronization
 
 ## Important validation boundaries
 
-- Provider HTTP contract/service tests are mocked. They do **not** prove current credentials, entitlements, provider availability or end-to-end authenticated data retrieval.
+- Provider historical HTTP and master-retrieval tests are mocked. They do **not** prove current credentials, entitlements, provider availability, or a successful live CSV transfer.
+- The official Dhan compact endpoint is documented as `https://images.dhan.co/api-data/api-scrip-master.csv`; the available external web fetcher could not consume the provider's octet-stream response, so live-transfer success is not claimed.
 - Canonical Upstox/Dhan services are integration-tested against PostgreSQL plus mocked HTTP, not real provider accounts.
-- Dhan compact-master parsing/synchronization is validated with fixture CSV content plus real PostgreSQL. No live provider-master download or freshness guarantee is claimed.
-- Provider classification metadata is not used to auto-create or symbol-match canonical instruments; only pre-existing Dhan security-ID links are enriched.
-- Dhan derivative support here is classification/routing for the standard daily historical endpoint, not expired-options analytics or live derivatives execution.
+- Provider-master synchronization never auto-creates or symbol-matches canonical instruments; only pre-existing Dhan security-ID links are enriched.
 - Replay checkpoints are serializable/restart-safe state objects; no external checkpoint store or distributed job runner is claimed.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
@@ -138,7 +141,7 @@ Validated additions in this turn include:
 
 ## Highest-priority work
 
-1. Add a secure read-only provider-master retrieval boundary with content-size/timeouts/checks and use it only to feed the already-tested parser/synchronizer; do not auto-create canonical instruments.
+1. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
 2. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
 3. Extend checkpoint/resume into long-running replay/backtest orchestration only where durable continuation is actually needed.
 4. Add broader feature/strategy output versioning and registry/lifecycle semantics before scanner work.
@@ -147,4 +150,4 @@ Validated additions in this turn include:
 
 ## Blockers
 
-No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. Live provider-master retrieval has not yet been integrated/validated. Live trading remains deliberately unavailable and no broker order execution has been introduced.
+No blocker for continued research/paper development. Real authenticated historical-provider validation requires user-supplied credentials/entitlements through secure runtime configuration. A real Dhan master transfer could not be validated through the available web retrieval path because it does not accept the endpoint's octet-stream content. Live trading remains deliberately unavailable and no broker order execution has been introduced.
