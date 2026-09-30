@@ -15,9 +15,10 @@ The same strategy/decision/risk contracts power replay-driven paper execution an
 Canonical read-only historical slices are now validated for:
 
 - Upstox: canonical instrument → full-range dated Upstox identifier → read-only historical client → validated provider bars.
-- Dhan daily cash: canonical NSE/BSE cash instrument → full-range dated Dhan security ID → explicit `NSE_EQ`/`BSE_EQ` + `EQUITY` classification → read-only daily client → validated provider bars.
+- Dhan cash: canonical NSE/BSE cash instrument → full-range Dhan security ID → explicit `NSE_EQ`/`BSE_EQ` + `EQUITY` classification → daily client.
+- Dhan derivatives: canonical futures/options contract → full-range Dhan security ID carrying explicit provider exchange segment, instrument type and expiry code → daily client.
 
-Identifier-rollover ranges are rejected before HTTP. Dhan derivatives are also rejected rather than inferred because the canonical model does not yet encode enough provider-specific derivative classification.
+Identifier-rollover ranges and Dhan classification mismatches are rejected before HTTP. The platform never infers FUTIDX/FUTSTK or OPTIDX/OPTSTK from incomplete canonical fields.
 
 ### Safety controls already validated
 
@@ -32,16 +33,18 @@ Identifier-rollover ranges are rejected before HTTP. Dhan derivatives are also r
 - transaction rollback/no in-memory economic publication on duplicate fill, audit failure or unavailable database
 - bounded transient-only provider retries; auth/client failures are not retried
 - provider historical responses with duplicate timestamps fail closed
+- Dhan expiry codes outside the documented `0/1/2` set fail before HTTP
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
 
 - canonical instrument master/provider identifiers
-- point-in-time and full-range provider-ID resolution with missing/overlap/rollover failure behavior
+- migration `0006` nullable provider classification metadata for exchange segment, instrument type and expiry code
+- point-in-time/full-range provider reference resolution with missing/overlap/rollover failure behavior
 - recorded event JSONL ingestion and historical-source abstraction
 - read-only Upstox/Dhan historical HTTP contract clients using mocked transports
 - canonical Upstox historical service using PostgreSQL identifier resolution plus mocked HTTP
-- canonical Dhan daily cash service for explicit NSE/BSE cash mappings using PostgreSQL plus mocked HTTP
+- canonical Dhan daily cash/derivative service using explicit PostgreSQL provider metadata plus mocked HTTP
 - provider OHLC/provenance/duplicate-timestamp validation and OHLC→closed-candle normalization
 - deterministic replay checkpoints with strict versioned JSON serialization and normalized-stream digest binding
 - quote-quality validation
@@ -54,12 +57,12 @@ Identifier-rollover ranges are rejected before HTTP. Dhan derivatives are also r
 
 ### Current objective
 
-Deepen read-only provider validation and research reproducibility without weakening canonical mapping or trading-safety boundaries.
+Replace fixture-authored provider metadata with verified provider-master evidence and deepen research reproducibility without weakening trading-safety boundaries.
 
 Immediate work:
 
-1. Add optional authenticated read-only provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
-2. Define explicit canonical/provider classification metadata before any Dhan futures/options support; do not infer ambiguous provider enums.
+1. Add provider instrument-master ingestion that maps verified Dhan detailed-list fields into canonical provider identifier metadata without overwriting ambiguous/conflicting mappings.
+2. Add optional authenticated read-only provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
 3. Extend replay checkpointing into orchestration-level durable continuation only where long-running replay/backtest jobs actually need it.
 4. Add broader feature/strategy output versioning plus registry/lifecycle semantics before scanner work.
 5. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
