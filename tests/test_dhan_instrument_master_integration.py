@@ -2,13 +2,16 @@ import os
 import uuid
 from decimal import Decimal
 
+import httpx
 import pytest
 from sqlalchemy import select
 
 from trading_platform.config import Settings
 from trading_platform.dhan_instrument_master import (
+    DhanCompactMasterFetcher,
     DhanInstrumentMasterConflictError,
     DhanInstrumentMasterRecord,
+    DhanInstrumentMasterRefreshService,
     DhanInstrumentMasterSynchronizer,
 )
 from trading_platform.infrastructure import Infrastructure
@@ -20,6 +23,11 @@ from trading_platform.instruments import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+HEADER = (
+    "SEM_SMST_SECURITY_ID,SEM_EXM_EXCH_ID,SEM_SEGMENT,"
+    "SEM_INSTRUMENT_NAME,SEM_EXPIRY_CODE\n"
+)
 
 
 def require_integration_tests() -> None:
@@ -206,5 +214,67 @@ async def test_dhan_master_sync_detects_all_conflicts_before_mutation() -> None:
             assert first_identifier.provider_exchange_segment is None
             assert first_identifier.provider_instrument_type is None
             assert first_identifier.provider_expiry_code is None
+    finally:
+        await infrastructure.close()
+
+
+async def test_dhan_master_refresh_fetches_before_transaction_and_commits_sync() -> None:
+    require_integration_tests()
+    infrastructure = Infrastructure(Settings(_env_file=None))
+    instrument_id = uuid.uuid4()
+    security_id = str(900000 + (instrument_id.int % 99999))
+    csv_body = (HEADER + f"{security_id},NSE,D,FUTSTK,1\n").encode()
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, content=csv_body, request=request)
+
+    try:
+        async with infrastructure.sessions() as session:
+            session.add(
+                Instrument(
+                    id=instrument_id,
+                    exchange=Exchange.NSE,
+                    segment=Segment.FUTURES,
+                    trading_symbol=f"REFRESH-{instrument_id.hex[:8]}",
+                    name="Dhan Master Refresh Test",
+                    lot_size=25,
+                    tick_size=Decimal("0.05"),
+                    active=True,
+                )
+            )
+            session.add(
+                InstrumentIdentifier(
+                    instrument_id=instrument_id,
+                    provider="dhan",
+                    external_id=security_id,
+                )
+            )
+            await session.commit()
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            service = DhanInstrumentMasterRefreshService(
+                sessions=infrastructure.sessions,
+                fetcher=DhanCompactMasterFetcher(http_client=http),
+            )
+            result = await service.refresh()
+
+        assert calls == 1
+        assert result.matched == 1
+        assert result.updated == 1
+        assert result.unmatched_records == 0
+
+        async with infrastructure.sessions() as session:
+            identifier = await session.scalar(
+                select(InstrumentIdentifier).where(
+                    InstrumentIdentifier.instrument_id == instrument_id
+                )
+            )
+            assert identifier is not None
+            assert identifier.provider_exchange_segment == "NSE_FNO"
+            assert identifier.provider_instrument_type == "FUTSTK"
+            assert identifier.provider_expiry_code == 1
     finally:
         await infrastructure.close()
