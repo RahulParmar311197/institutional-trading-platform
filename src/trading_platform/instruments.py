@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -103,5 +104,8 @@ class InstrumentIdentifier(Base):
     external_id: Mapped[str] = mapped_column(String(200), nullable=False)
     valid_from: Mapped[date | None] = mapped_column(Date)
     valid_to: Mapped[date | None] = mapped_column(Date)
+    provider_exchange_segment: Mapped[str | None] = mapped_column(String(50))
+    provider_instrument_type: Mapped[str | None] = mapped_column(String(50))
+    provider_expiry_code: Mapped[int | None] = mapped_column(Integer)
 
     instrument: Mapped[Instrument] = relationship(back_populates="identifiers")
