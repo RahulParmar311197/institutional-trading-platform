@@ -10,6 +10,7 @@ from trading_platform.infrastructure import Infrastructure
 from trading_platform.instrument_identifiers import (
     AmbiguousInstrumentIdentifierError,
     InstrumentIdentifierNotFoundError,
+    InstrumentIdentifierRangeNotCoveredError,
     InstrumentIdentifierRepository,
 )
 from trading_platform.instruments import (
@@ -74,10 +75,31 @@ async def test_provider_identifier_resolution_respects_validity_windows() -> Non
                 provider="upstox",
                 on_date=date(2025, 9, 1),
             )
+            covered = await repository.resolve_range(
+                instrument_id=instrument_id,
+                provider="upstox",
+                start_date=date(2025, 7, 1),
+                end_date=date(2025, 9, 1),
+            )
 
             assert old.startswith("NSE_EQ|OLD-")
             assert new.startswith("NSE_EQ|NEW-")
+            assert covered == new
 
+            with pytest.raises(InstrumentIdentifierRangeNotCoveredError):
+                await repository.resolve_range(
+                    instrument_id=instrument_id,
+                    provider="upstox",
+                    start_date=date(2025, 6, 1),
+                    end_date=date(2025, 8, 1),
+                )
+            with pytest.raises(ValueError, match="start_date"):
+                await repository.resolve_range(
+                    instrument_id=instrument_id,
+                    provider="upstox",
+                    start_date=date(2025, 9, 1),
+                    end_date=date(2025, 8, 1),
+                )
             with pytest.raises(InstrumentIdentifierNotFoundError):
                 await repository.resolve(
                     instrument_id=instrument_id,
@@ -135,11 +157,19 @@ async def test_overlapping_provider_identifier_windows_fail_closed() -> None:
             await session.commit()
 
         async with infrastructure.sessions() as session:
+            repository = InstrumentIdentifierRepository(session)
             with pytest.raises(AmbiguousInstrumentIdentifierError):
-                await InstrumentIdentifierRepository(session).resolve(
+                await repository.resolve(
                     instrument_id=instrument_id,
                     provider="dhan",
                     on_date=date(2025, 9, 1),
+                )
+            with pytest.raises(AmbiguousInstrumentIdentifierError):
+                await repository.resolve_range(
+                    instrument_id=instrument_id,
+                    provider="dhan",
+                    start_date=date(2025, 7, 1),
+                    end_date=date(2025, 9, 1),
                 )
     finally:
         await infrastructure.close()
