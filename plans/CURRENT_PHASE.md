@@ -23,7 +23,12 @@ Research restartability and reproducibility now include:
 - OOS provenance/result identities binding boundary, fold/spec, strategy, features, normalized stream, backtest configuration and execution assumptions;
 - explicit Sharpe/Sortino conventions with mandatory `periods_per_year`;
 - fixed-strategy cold-start OOS fold evaluation that rejects any train/out-of-window event rather than silently filtering it;
-- immutable fold-level aggregate reporting with compatibility/order validation and UTC-canonical report identity; overlapping folds are never compounded into a synthetic portfolio path.
+- immutable fold-level aggregate reporting with compatibility/order validation and UTC-canonical report identity; overlapping folds are never compounded into a synthetic portfolio path;
+- explicit warm-up/fitted-state provenance binding fold, source window, normalized source stream, strategy/features and serialized state digest without yet applying that state;
+- deterministic fit/embargo/validation splits wholly inside the parent training window;
+- validation-only backtest result/provenance envelopes and objective-bound scores;
+- deterministic candidate selection with fold/objective/direction binding and stable tie-breaking;
+- selected OOS evaluation that requires the test backtester candidate to match the validation decision before the test fold can run.
 
 Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
@@ -41,6 +46,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - provider-master conflicts, redirects, oversized responses and malformed data fail closed
 - replay/backtest malformed, mismatched and internally inconsistent checkpoints fail closed
 - research partitions/returns/folds enforce explicit time and leakage boundaries
+- validation evidence is restricted to the validation window; selected OOS runs require the exact selected candidate identity
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -55,15 +61,18 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - fixed-strategy cold-start OOS evaluation
 - explicit Sharpe/Sortino calculations
 - fold-level walk-forward aggregate reports without cross-fold path compounding
+- warm-up/fitted-state provenance without state application
+- leakage-safe fit/validation splitting and real validation-backtest evidence
+- objective-bound deterministic validation selection and selection-bound OOS execution
 
 ### Current objective
 
-Continue failure hardening only where a distinct fail-closed invariant is missing, and deepen leakage-safe research semantics beyond cold-start fold evaluation. Keep provider validation claims distinct from mocked integrations and preserve all live-trading safety boundaries.
+Continue failure hardening only where a distinct fail-closed invariant is missing, and deepen leakage-safe research execution without allowing training/validation/test contamination. Keep provider validation claims distinct from mocked integrations and preserve all live-trading safety boundaries.
 
 Immediate work:
 
-1. Define explicit warm-up/fitted-state provenance before allowing training-window-derived state into OOS evaluation; the current evaluator stays cold-start until that boundary exists.
-2. Define a separate selection/validation contract before any optimizer or parameter search so test-fold outcomes cannot influence their own evaluated configuration.
+1. Define a typed strategy/feature state export-import boundary before applying warm-up/fitted state during validation or OOS execution; state provenance is tested, but state restoration/application is not implemented.
+2. Add parameter-grid/search orchestration only on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
 3. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
 4. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 5. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
@@ -76,7 +85,8 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 
 - unrestricted live order placement or any real broker order submission
 - broker credentials in source control
-- optimizer-driven parameter selection/ranking before leakage-safe selection semantics exist
+- warm-state application before a typed state import/export contract exists
+- test-fold-driven parameter selection or optimizer ranking
 - distributed orchestration without a concrete workload
 - ML-controlled execution
 - profitability claims
