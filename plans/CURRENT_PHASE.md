@@ -21,7 +21,11 @@ Research restartability now has two validated layers:
 
 A backtest interrupted after a simulated fill, serialized to disk, restored into a fresh backtester and completed produces exactly the same `BacktestResult` as an uninterrupted run. Checkpoints are bound to normalized stream content and the strategy/risk/execution configuration.
 
+Checkpoint recovery is now hardened beyond schema validation: trade/P&L/position/fee/drawdown chains are checked for internal consistency, pipeline/equity state must match the processed replay prefix, failed restores do not partially mutate an existing session, and an injected atomic-replace failure preserves the last good checkpoint file while cleaning the temporary file.
+
 Strategy identity is explicit in the evaluator contract. The registry provides immutable ID registration, ACTIVE/RETIRED lifecycle, fresh factory resolution and explicit historical resolution of retired versions; factories are revalidated against identity and history semantics.
+
+The regime engine is the first derived research feature with an explicit versioned output contract. Its feature identity is parameter-specific and Decimal-canonical, and outputs carry canonical instrument plus closed-candle `as_of` event-time provenance.
 
 ### Safety controls already validated
 
@@ -35,7 +39,9 @@ Strategy identity is explicit in the evaluator contract. The registry provides i
 - duplicate historical timestamps fail closed
 - invalid Dhan expiry codes/classifications fail before HTTP
 - provider-master redirects, oversized responses, invalid encoding/schema and metadata conflicts fail closed
-- replay/backtest checkpoint stream/config mismatch and malformed schema fail closed
+- replay/backtest checkpoint stream/config mismatch, malformed schema and internally inconsistent economic/pipeline state fail closed
+- failed backtest restore leaves the existing in-memory session unchanged
+- interrupted local checkpoint replacement preserves the previously committed checkpoint
 - runtime container import smoke after production-only dependency install
 
 ### Quant/research foundation already validated
@@ -47,24 +53,25 @@ Strategy identity is explicit in the evaluator contract. The registry provides i
 - Dhan compact-master parser, bounded fetcher, conflict-safe synchronizer and transactional refresh
 - provider OHLC/provenance/duplicate-timestamp validation and OHLC→closed-candle normalization
 - deterministic replay plus atomic local replay checkpoint persistence
-- full-state deterministic backtest checkpoint/resume
+- full-state deterministic backtest checkpoint/resume with cross-field/prefix integrity checks
 - configurable sessions, session-aligned multi-timeframe candles, SMA/EMA/RSI/ATR/VWAP
 - confirmed swings, BOS/CHoCH, FVG lifecycle, displacement-confirmed MSS and deterministic trend/volatility regime
 - versioned EMA crossover identity plus immutable strategy registry/lifecycle
+- versioned parameter-specific regime feature outputs with event-time provenance
 - event-driven backtester with fees/slippage, risk rejection, no-look-ahead regression, equity curve and core metrics
 
 ### Current objective
 
-Deepen research reproducibility/failure hardening and versioned feature contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
+Deepen failure hardening and reproducible feature contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
 
 Immediate work:
 
-1. Add additional checkpoint/recovery fault injection and internal-state consistency validation before distributed research orchestration.
-2. Add broader versioned feature-output contracts on top of the tested strategy registry/lifecycle.
-3. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
-4. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
-5. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
-6. Define explicit dataset/period semantics before walk-forward, OOS, Sharpe/Sortino or annualized metrics.
+1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first make first-run initialization versus persisted-state corruption semantics explicit where absence is currently valid.
+2. Extend versioned feature-output contracts to the next derived feature only when its event-time/reproducibility boundary is explicit.
+3. Define explicit dataset and period semantics before walk-forward/OOS or annualized research metrics.
+4. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
+5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
+6. Continue SMC/liquidity concepts only when availability/invalidation rules are objective and regression-testable.
 
 ### Engineering gates
 
@@ -75,7 +82,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 - unrestricted live order placement
 - any real broker order submission
 - broker credentials in source control
-- distributed research orchestration before checkpoint recovery is sufficiently hardened
+- distributed research orchestration before a real workload justifies it
 - ML-controlled execution
 - profitability claims
 - Kubernetes/microservice expansion
