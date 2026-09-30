@@ -144,6 +144,29 @@ async def test_dhan_daily_request_and_parallel_array_response_contract() -> None
     assert bars[1].source == "dhan_v2_daily"
 
 
+async def test_dhan_expiry_code_validation_happens_before_http() -> None:
+    called = False
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = DhanHistoricalClient(access_token="dhan-token", http_client=http)
+        with pytest.raises(ValueError, match="expiry_code"):
+            await client.fetch_daily(
+                security_id="1333",
+                exchange_segment="NSE_FNO",
+                instrument="FUTSTK",
+                from_date=date(2025, 1, 1),
+                to_date=date(2025, 1, 2),
+                expiry_code=7,
+            )
+
+    assert called is False
+
+
 async def test_dhan_intraday_request_and_90_day_limit() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
