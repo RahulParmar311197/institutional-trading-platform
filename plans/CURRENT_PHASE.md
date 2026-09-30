@@ -32,7 +32,8 @@ Research restartability and reproducibility now include:
 - validation-only backtest result/provenance envelopes and objective-bound scores;
 - deterministic candidate selection with fold/objective/direction binding and stable tie-breaking;
 - selected OOS evaluation that requires the test backtester candidate to match the validation decision before the test fold can run;
-- combined selected+warm OOS execution that validates the selected candidate first, then applies compatible train-derived closed-candle history, and binds decision/candidate/preparation/OOS identities in one immutable result.
+- combined selected+warm OOS execution that validates the selected candidate first, then applies compatible train-derived closed-candle history, and binds decision/candidate/preparation/OOS identities in one immutable result;
+- deterministic explicit-candidate validation search that rejects duplicate candidate identities and test-window events, runs candidates in stable identity order and emits candidate-set/search identities plus the existing selection decision.
 
 Persistent control recovery has an explicit initialization contract. Migration `0007` seeds singleton operational state as `NORMAL` only when missing and preserves existing state. All persisted-control load and mutation paths require that singleton. Missing state, invalid persisted mode/scope, malformed lock-key encodings and database unavailability fail closed.
 
@@ -51,7 +52,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - replay/backtest malformed, mismatched and internally inconsistent checkpoints fail closed
 - research partitions/returns/folds enforce explicit time and leakage boundaries
 - warm OOS imports closed pre-test history only; incomplete train candles are never carried across the boundary
-- validation evidence is restricted to the validation window; selected OOS runs require the exact selected candidate identity
+- validation search accepts validation-window evidence only and rejects duplicate candidate identities
 - combined selected+warm OOS does not let preparation state change which candidate validation selected
 - runtime container import smoke after production-only dependency install
 
@@ -72,6 +73,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - leakage-safe fit/validation splitting and real validation-backtest evidence
 - objective-bound deterministic validation selection and selection-bound OOS execution
 - combined selected+warm OOS execution with immutable decision/preparation/result identity binding
+- deterministic validation candidate-set search using real backtester results
 
 ### Current objective
 
@@ -79,7 +81,7 @@ Continue failure hardening only where a distinct fail-closed invariant is missin
 
 Immediate work:
 
-1. Add deterministic parameter-grid/search orchestration on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
+1. Add an explicit deterministic parameter-grid specification/generator and multi-fold search orchestration on top of the tested explicit-candidate validation search; test-fold outcomes must never select or tune their own configuration.
 2. Define generic fitted/model/feature-state export-import only when a stateful research component actually requires it; the current tested warm path is specifically closed-candle history for stateless strategy evaluation.
 3. Extend selected/warm OOS aggregate reporting only if per-fold selection-decision and preparation-state identities remain explicit and overlapping folds are never synthesized into one path.
 4. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
