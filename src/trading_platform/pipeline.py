@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
-from trading_platform.candles import Candle, CandleBuilder
+from trading_platform.candles import Candle, CandleBuilder, Trade
 from trading_platform.decision import TradingDecision, decide
 from trading_platform.recorded_events import RecordedMarketEvent
 from trading_platform.replay import ReplayStream
@@ -15,6 +15,12 @@ class PipelineStep:
     closed_candle: Candle | None
     signal: StrategySignal | None
     decision: TradingDecision | None
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayPipelineState:
+    closed_candles: tuple[Candle, ...]
+    pending_trades: tuple[Trade, ...]
 
 
 class ReplayStrategyPipeline:
@@ -38,6 +44,25 @@ class ReplayStrategyPipeline:
     def reset(self) -> None:
         self._builder = CandleBuilder(self.instrument_id, interval=self.interval)
         self._closed_candles.clear()
+
+    def checkpoint_state(self) -> ReplayPipelineState:
+        return ReplayPipelineState(
+            closed_candles=tuple(self._closed_candles),
+            pending_trades=self._builder.pending_trades,
+        )
+
+    def restore_state(self, state: ReplayPipelineState) -> None:
+        for candle in state.closed_candles:
+            if candle.instrument_id != self.instrument_id:
+                raise ValueError("checkpoint candle instrument does not match pipeline")
+            if not candle.closed:
+                raise ValueError("checkpoint closed-candle history contains open candle")
+        self.reset()
+        self._closed_candles.extend(state.closed_candles)
+        for trade in state.pending_trades:
+            completed = self._builder.add(trade)
+            if completed is not None:
+                raise ValueError("checkpoint pending trades span multiple candle buckets")
 
     def process_event(self, event: RecordedMarketEvent) -> PipelineStep:
         if event.instrument_id != self.instrument_id:

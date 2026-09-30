@@ -1,10 +1,16 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
-from trading_platform.backtest import EventDrivenBacktester, ExecutionAssumptions
+from trading_platform.backtest import (
+    BacktestCheckpoint,
+    BacktestCheckpointFileStore,
+    EventDrivenBacktester,
+    ExecutionAssumptions,
+)
 from trading_platform.decision import DecisionAction
 from trading_platform.pipeline import ReplayStrategyPipeline
 from trading_platform.recorded_events import RecordedEventType, RecordedMarketEvent
@@ -40,24 +46,32 @@ def risk_engine(*, max_order: str = "100000") -> RiskEngine:
     )
 
 
-def make_backtester(*, max_order: str = "100000") -> EventDrivenBacktester:
+def make_backtester(
+    *,
+    max_order: str = "100000",
+    starting_equity: str = "10000",
+) -> EventDrivenBacktester:
     return EventDrivenBacktester(
         interval=timedelta(minutes=1),
         strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
         risk_engine=risk_engine(max_order=max_order),
         requested_quantity=1,
-        starting_equity=Decimal("10000"),
+        starting_equity=Decimal(starting_equity),
     )
 
 
-def test_event_driven_backtest_is_repeatable_and_applies_fees() -> None:
-    events = [
+def sample_events() -> list[RecordedMarketEvent]:
+    return [
         event("5", 4, "98"),
         event("1", 0, "100"),
         event("3", 2, "101"),
         event("2", 1, "99"),
         event("4", 3, "98"),
     ]
+
+
+def test_event_driven_backtest_is_repeatable_and_applies_fees() -> None:
+    events = sample_events()
     backtester = EventDrivenBacktester(
         interval=timedelta(minutes=1),
         strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
@@ -170,3 +184,100 @@ def test_risk_rejections_do_not_create_backtest_trades() -> None:
     assert result.final_equity == Decimal("10000")
     assert result.metrics.total_return == Decimal("0")
     assert result.metrics.max_drawdown == Decimal("0")
+
+
+def test_backtest_checkpoint_resumes_full_state_without_duplicate_economics(
+    tmp_path: Path,
+) -> None:
+    events = sample_events()
+    assumptions = ExecutionAssumptions(fee_per_filled_order=Decimal("1"))
+    uninterrupted_backtester = EventDrivenBacktester(
+        interval=timedelta(minutes=1),
+        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
+        risk_engine=risk_engine(),
+        requested_quantity=1,
+        starting_equity=Decimal("10000"),
+        assumptions=assumptions,
+    )
+    uninterrupted = uninterrupted_backtester.run(events)
+
+    interrupted_backtester = EventDrivenBacktester(
+        interval=timedelta(minutes=1),
+        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
+        risk_engine=risk_engine(),
+        requested_quantity=1,
+        starting_equity=Decimal("10000"),
+        assumptions=assumptions,
+    )
+    session = interrupted_backtester.create_session(events)
+    assert session.step(4) == 4
+    assert len(session.trades) == 1
+    assert session.trades[0].action is DecisionAction.LONG
+
+    serialized = session.checkpoint().to_json()
+    checkpoint = BacktestCheckpoint.from_json(serialized)
+    store = BacktestCheckpointFileStore(tmp_path / "backtest" / "state.json")
+    store.save(checkpoint)
+
+    fresh_backtester = EventDrivenBacktester(
+        interval=timedelta(minutes=1),
+        strategy=EmaCrossoverStrategy(fast_period=1, slow_period=2),
+        risk_engine=risk_engine(),
+        requested_quantity=1,
+        starting_equity=Decimal("10000"),
+        assumptions=assumptions,
+    )
+    persisted = store.load()
+    assert persisted is not None
+    resumed = fresh_backtester.create_session(events, checkpoint=persisted)
+    result = resumed.run_to_completion()
+
+    assert result == uninterrupted
+    assert [trade.action for trade in result.trades] == [
+        DecisionAction.LONG,
+        DecisionAction.SHORT,
+    ]
+    assert store.clear() is True
+    assert store.load() is None
+
+
+def test_backtest_checkpoint_rejects_changed_stream_or_configuration() -> None:
+    events = sample_events()
+    session = make_backtester().create_session(events)
+    session.step(3)
+    checkpoint = session.checkpoint()
+
+    changed_events = [
+        event("5", 4, "98"),
+        event("1", 0, "100"),
+        event("3", 2, "102"),
+        event("2", 1, "99"),
+        event("4", 3, "98"),
+    ]
+    with pytest.raises(ValueError, match="stream digest"):
+        make_backtester().create_session(changed_events, checkpoint=checkpoint)
+
+    with pytest.raises(ValueError, match="configuration"):
+        make_backtester(starting_equity="20000").create_session(
+            events,
+            checkpoint=checkpoint,
+        )
+
+
+def test_backtest_checkpoint_rejects_malformed_state_and_incomplete_result() -> None:
+    session = make_backtester().create_session(sample_events())
+    session.step(1)
+    with pytest.raises(ValueError, match="completed session"):
+        session.result()
+
+    payload = json_with_extra_field(session.checkpoint().to_json())
+    with pytest.raises(ValueError, match="unexpected fields"):
+        BacktestCheckpoint.from_json(payload)
+
+
+def json_with_extra_field(payload: str) -> str:
+    import json
+
+    parsed = json.loads(payload)
+    parsed["extra"] = True
+    return json.dumps(parsed)

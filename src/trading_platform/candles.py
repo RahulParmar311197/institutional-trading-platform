@@ -34,6 +34,10 @@ class CandleBuilder:
         self._trades: list[Trade] = []
         self._start: datetime | None = None
 
+    @property
+    def pending_trades(self) -> tuple[Trade, ...]:
+        return tuple(self._trades)
+
     def add(self, trade: Trade) -> Candle | None:
         if trade.instrument_id != self.instrument_id:
             raise ValueError("trade instrument does not match candle builder")
