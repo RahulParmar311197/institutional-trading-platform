@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -134,7 +134,7 @@ class UpstoxHistoricalClient:
             raise ValueError("Upstox historical response missing candles")
 
         bars = tuple(_parse_upstox_candle(item) for item in candles)
-        return tuple(sorted(bars, key=lambda item: item.timestamp))
+        return _sort_and_validate_unique_bars(bars)
 
 
 def _validate_upstox_interval(unit: UpstoxHistoricalUnit, interval: int) -> None:
@@ -336,4 +336,14 @@ def _parse_dhan_bars(
         )
         for index in range(count)
     ]
-    return tuple(sorted(bars, key=lambda item: item.timestamp))
+    return _sort_and_validate_unique_bars(bars)
+
+
+def _sort_and_validate_unique_bars(
+    bars: Sequence[HistoricalBar],
+) -> tuple[HistoricalBar, ...]:
+    ordered = tuple(sorted(bars, key=lambda item: item.timestamp))
+    timestamps = [bar.timestamp for bar in ordered]
+    if len(set(timestamps)) != len(timestamps):
+        raise ValueError("historical response contains duplicate candle timestamps")
+    return ordered
