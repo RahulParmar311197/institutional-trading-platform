@@ -26,7 +26,14 @@ class RiskControlRepository:
             raise ValueError("persisted non-global risk lock has invalid storage key")
         return storage_key
 
+    async def _require_operational_state(self) -> OperationalStateRecord:
+        record = await self.session.get(OperationalStateRecord, OPERATIONAL_STATE_ID)
+        if record is None:
+            raise RuntimeError("persistent operational state is missing")
+        return record
+
     async def persist_lock(self, lock: RiskLock) -> None:
+        await self._require_operational_state()
         storage_key = self._storage_key(lock)
         record = await self.session.get(
             RiskLockRecord,
@@ -51,6 +58,7 @@ class RiskControlRepository:
         *,
         key: str | None = None,
     ) -> bool:
+        await self._require_operational_state()
         storage_key = GLOBAL_STORAGE_KEY if key is None else key
         record = await self.session.get(
             RiskLockRecord,
@@ -62,18 +70,11 @@ class RiskControlRepository:
         return True
 
     async def persist_mode(self, mode: OperationalMode) -> None:
-        record = await self.session.get(OperationalStateRecord, OPERATIONAL_STATE_ID)
-        if record is None:
-            raise RuntimeError("persistent operational state is missing")
+        record = await self._require_operational_state()
         record.mode = mode.value
 
     async def load(self) -> RiskControlBook:
-        operational_state = await self.session.get(
-            OperationalStateRecord,
-            OPERATIONAL_STATE_ID,
-        )
-        if operational_state is None:
-            raise RuntimeError("persistent operational state is missing")
+        operational_state = await self._require_operational_state()
 
         book = RiskControlBook()
         book.set_mode(OperationalMode(operational_state.mode))
