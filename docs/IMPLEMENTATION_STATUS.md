@@ -34,15 +34,16 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports both app and historical-provider modules |
-| CI | TESTED | cumulative `main` run `36692182664` completed successfully |
+| CI | TESTED | cumulative `main` run `36692641234` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
-| Provider identifier resolver | TESTED | date-valid provider IDs resolve deterministically; missing and overlapping mappings fail closed |
+| Provider identifier resolver | TESTED | point-in-time and full-range provider IDs resolve deterministically; missing, overlapping and rollover-crossing mappings fail closed |
 | Recorded market events | TESTED | provider-neutral recorded trade envelope, timestamps, ordering, dedupe/conflict checks |
 | Recorded JSONL ingestion | TESTED | Decimal/timestamp round-trip, normalization and malformed-input rejection |
 | Provider-neutral historical source | TESTED | local JSONL source, filtering and multi-source normalization |
 | Provider historical OHLC model | TESTED | timezone/provenance/positive-price/OHLC coherence/volume/OI invariants covered |
 | Historical provider normalization | TESTED | provider OHLCV bars convert to canonical closed candles without inventing trades |
 | Upstox historical read-only client | TESTED | official V3 request shape represented; exact URL/auth/header/response behavior covered with `httpx.MockTransport` only |
+| Canonical Upstox historical service | TESTED | canonical instrument→full-range provider ID→read-only client path tested; rollover-crossing range is rejected before HTTP |
 | Dhan historical read-only client | TESTED | official v2 daily/intraday request/response shapes represented and covered with `httpx.MockTransport` only |
 | Authenticated external historical ingestion | IN_PROGRESS | client contracts exist; no real credentialed provider call has been claimed or validated |
 | Historical read retry policy | TESTED | bounded retry for transport errors and transient HTTP statuses; auth/client errors do not retry |
@@ -52,9 +53,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Multi-timeframe candles | TESTED | session-anchored aggregation, session-close truncation and outside-session rejection |
 | Indicators | TESTED | SMA, EMA, RSI, ATR and VWAP deterministic coverage |
 | Price action | TESTED | confirmed swings and structure breaks with explicit confirmation timing |
-| Market structure | TESTED | event-time BOS continuation and opposite-direction CHoCH transitions |
+| Market structure | TESTED | event-time BOS continuation and opposite-direction CHOCH transitions |
 | FVG lifecycle | TESTED | deterministic bullish/bearish FVG open/partial/filled/invalidated lifecycle |
-| MSS | TESTED | CHoCH is not aliased to MSS; MSS additionally requires direction-aligned ATR-based displacement using only available candles |
+| MSS | TESTED | CHOCH is not aliased to MSS; MSS additionally requires direction-aligned ATR-based displacement using only available candles |
 | SMC/ICT broader layer | IN_PROGRESS | FVG and MSS tested; blocks/liquidity concepts remain pending |
 | Regime engine | TESTED | deterministic trend + ATR-ratio LOW/NORMAL/HIGH volatility regime |
 | Strategy framework | IN_PROGRESS | protocol/history contract + EMA crossover baseline tested; registry/lifecycle/versioning pending |
@@ -90,7 +91,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `1cbbf438dc4c596a921aabf59a50c9d2250d3377` in GitHub Actions run `36692182664`.
+A green cumulative `main` CI run completed for commit `5203138367fe178283d435828ea13424411146b8` in GitHub Actions run `36692641234`.
 
 The run passed, in one workflow:
 
@@ -104,7 +105,7 @@ The run passed, in one workflow:
 - Docker image build
 - runtime-only package smoke import for `trading_platform.app` and `trading_platform.provider_historical`
 
-Validated additions since the previous status snapshot include:
+Validated additions in the current milestone include:
 
 - deterministic backtest equity curve and core performance metrics
 - MSS with explicit displacement/ATR confirmation and no-future-candle semantics
@@ -115,12 +116,14 @@ Validated additions since the previous status snapshot include:
 - historical OHLC coherence and provenance validation
 - durable execution fail-closed behavior when the database cannot be acquired
 - health-driven persisted safety escalation and no automatic relaxation
-- canonical instrument→provider-ID resolution with date windows and ambiguity rejection
+- canonical instrument→provider-ID point/range resolution with ambiguity and rollover rejection
+- canonical Upstox historical service that rejects rollover-crossing ranges before network I/O
 - Docker runtime-import smoke validation
 
 ## Important validation boundaries
 
 - Provider HTTP contract tests are mocked. They do **not** prove current credentials, entitlements, provider availability or end-to-end authenticated data retrieval.
+- The canonical Upstox service is integration-tested against PostgreSQL plus mocked HTTP, not a real Upstox account.
 - No real broker order endpoint is implemented or called.
 - CI validates local/container behavior, not a deployed environment.
 - Backtest results are deterministic research outputs, not profitability claims.
@@ -128,7 +131,7 @@ Validated additions since the previous status snapshot include:
 
 ## Highest-priority work
 
-1. Add a safe historical-service layer that uses dated provider-ID resolution and refuses a request when one provider ID does not cover the full requested range; do not guess across identifier rollovers.
+1. Define an equally safe canonical Dhan historical service without guessing exchange-segment/instrument classification; extend canonical metadata only if necessary.
 2. Add authenticated read-only provider smoke tests only when credentials are explicitly supplied through secure configuration; keep those tests optional and never commit secrets.
 3. Expand replay/provider interruption and restart fault injection, including partial data windows and explicit resume/checkpoint semantics where required.
 4. Continue SMC only with objective/testable liquidity concepts; add feature/strategy versioning before scanner work.
