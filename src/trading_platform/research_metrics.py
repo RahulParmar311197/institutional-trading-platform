@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 
 from trading_platform.research_returns import PeriodicReturn, ReturnPeriodSpec
@@ -44,9 +45,9 @@ def calculate_risk_adjusted_metrics(
     count = Decimal(len(values))
     mean_return = sum(values, Decimal("0")) / count
 
-    sample_variance = (
-        sum((value - mean_return) ** 2 for value in values, Decimal("0"))
-        / Decimal(len(values) - 1)
+    squared_deviations = tuple((value - mean_return) ** 2 for value in values)
+    sample_variance = sum(squared_deviations, Decimal("0")) / Decimal(
+        len(values) - 1
     )
     sample_stddev = sample_variance.sqrt()
 
@@ -84,7 +85,7 @@ def _validate_return_periods(
     returns: tuple[PeriodicReturn, ...],
     return_spec: ReturnPeriodSpec,
 ) -> None:
-    previous_end = None
+    previous_end: datetime | None = None
     for item in returns:
         if item.period_end - item.period_start != return_spec.period:
             raise ValueError("periodic returns must match the explicit return period")
