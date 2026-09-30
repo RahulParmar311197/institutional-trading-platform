@@ -31,9 +31,9 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
     require_integration_tests()
     infrastructure = Infrastructure(Settings(_env_file=None))
     matched_id = uuid.uuid4()
-    unmatched_id = uuid.uuid4()
+    unrelated_id = uuid.uuid4()
     matched_security_id = str(500000 + (matched_id.int % 99999))
-    unmatched_security_id = str(600000 + (unmatched_id.int % 99999))
+    unrelated_security_id = str(600000 + (unrelated_id.int % 99999))
 
     try:
         async with infrastructure.sessions() as session:
@@ -50,11 +50,11 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
                         active=True,
                     ),
                     Instrument(
-                        id=unmatched_id,
+                        id=unrelated_id,
                         exchange=Exchange.NSE,
                         segment=Segment.CASH,
-                        trading_symbol=f"MASTER-{unmatched_id.hex[:8]}",
-                        name="Dhan Master Unmatched Test",
+                        trading_symbol=f"MASTER-{unrelated_id.hex[:8]}",
+                        name="Dhan Master Unrelated Test",
                         lot_size=1,
                         tick_size=Decimal("0.05"),
                         active=True,
@@ -69,9 +69,9 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
                         external_id=matched_security_id,
                     ),
                     InstrumentIdentifier(
-                        instrument_id=unmatched_id,
+                        instrument_id=unrelated_id,
                         provider="dhan",
-                        external_id=unmatched_security_id,
+                        external_id=unrelated_security_id,
                     ),
                 ]
             )
@@ -98,7 +98,7 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
             assert result.matched == 1
             assert result.updated == 1
             assert result.unchanged == 0
-            assert result.unmatched_identifiers == 1
+            assert result.unmatched_records == 1
 
         async with infrastructure.sessions() as session:
             matched_identifier = await session.scalar(
@@ -106,19 +106,19 @@ async def test_dhan_master_sync_populates_existing_identifier_metadata_only() ->
                     InstrumentIdentifier.instrument_id == matched_id
                 )
             )
-            unmatched_identifier = await session.scalar(
+            unrelated_identifier = await session.scalar(
                 select(InstrumentIdentifier).where(
-                    InstrumentIdentifier.instrument_id == unmatched_id
+                    InstrumentIdentifier.instrument_id == unrelated_id
                 )
             )
             assert matched_identifier is not None
             assert matched_identifier.provider_exchange_segment == "NSE_FNO"
             assert matched_identifier.provider_instrument_type == "FUTSTK"
             assert matched_identifier.provider_expiry_code == 1
-            assert unmatched_identifier is not None
-            assert unmatched_identifier.provider_exchange_segment is None
-            assert unmatched_identifier.provider_instrument_type is None
-            assert unmatched_identifier.provider_expiry_code is None
+            assert unrelated_identifier is not None
+            assert unrelated_identifier.provider_exchange_segment is None
+            assert unrelated_identifier.provider_instrument_type is None
+            assert unrelated_identifier.provider_expiry_code is None
     finally:
         await infrastructure.close()
 
