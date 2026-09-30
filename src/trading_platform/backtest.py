@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_platform.candles import Candle, Trade
+from trading_platform.candles import Candle, CandleBuilder, Trade
 from trading_platform.decision import DecisionAction, TradingDecision
 from trading_platform.paper import Position
 from trading_platform.paper_engine import PaperTradingEngine
@@ -18,7 +18,7 @@ from trading_platform.pipeline import ReplayPipelineState, ReplayStrategyPipelin
 from trading_platform.recorded_events import RecordedMarketEvent, normalize_recorded_events
 from trading_platform.replay import ReplayCheckpoint, ReplayStream
 from trading_platform.risk import RiskDecisionType, RiskEngine
-from trading_platform.strategy import StrategyEvaluator
+from trading_platform.strategy import SignalDirection, StrategyEvaluator
 
 BASIS_POINTS = Decimal("10000")
 BACKTEST_CHECKPOINT_VERSION = 1
@@ -70,6 +70,18 @@ class BacktestTrade:
     realized_pnl_delta: Decimal
     realized_pnl_after: Decimal
 
+    def __post_init__(self) -> None:
+        if not self.event_id:
+            raise ValueError("backtest trade event_id must not be empty")
+        if self.action not in {DecisionAction.LONG, DecisionAction.SHORT}:
+            raise ValueError("backtest trade action must be directional")
+        if self.quantity <= 0:
+            raise ValueError("backtest trade quantity must be positive")
+        if self.reference_price <= 0 or self.fill_price <= 0:
+            raise ValueError("backtest trade prices must be positive")
+        if self.fee < 0:
+            raise ValueError("backtest trade fee must be non-negative")
+
 
 @dataclass(frozen=True, slots=True)
 class EquityPoint:
@@ -78,6 +90,14 @@ class EquityPoint:
     equity: Decimal
     drawdown: Decimal
     drawdown_pct: Decimal
+
+    def __post_init__(self) -> None:
+        if not self.event_id:
+            raise ValueError("equity point event_id must not be empty")
+        if self.mark_price <= 0:
+            raise ValueError("equity point mark_price must be positive")
+        if self.drawdown < 0 or self.drawdown_pct < 0:
+            raise ValueError("equity point drawdown values must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +181,7 @@ class BacktestCheckpoint:
             raise ValueError("backtest peak_equity must be positive")
         if len(self.equity_curve) != self.replay.cursor:
             raise ValueError("backtest equity curve length must equal replay cursor")
+        _validate_checkpoint_internal_state(self)
 
     def to_json(self) -> str:
         payload = {
@@ -432,11 +453,31 @@ class BacktestSession:
         expected_config = self.backtester.checkpoint_config_digest()
         if checkpoint.config_digest != expected_config:
             raise ValueError("backtest checkpoint configuration does not match backtester")
-        self.replay.restore(checkpoint.replay)
-        self.pipeline.restore_state(checkpoint.pipeline_state)
-        if len(checkpoint.equity_curve) != self.replay.cursor:
-            raise ValueError("backtest checkpoint state does not match replay cursor")
-        self.paper.broker.positions[self.instrument_id] = checkpoint.position.to_position()
+
+        candidate_replay = ReplayStream(events=self.events)
+        candidate_replay.restore(checkpoint.replay)
+        candidate_pipeline = ReplayStrategyPipeline(
+            instrument_id=self.instrument_id,
+            interval=self.backtester.interval,
+            strategy=self.backtester.strategy,
+        )
+        candidate_pipeline.restore_state(checkpoint.pipeline_state)
+        _validate_checkpoint_against_session(
+            checkpoint=checkpoint,
+            events=self.events,
+            instrument_id=self.instrument_id,
+            backtester=self.backtester,
+        )
+
+        candidate_paper = PaperTradingEngine(risk_engine=self.backtester.risk_engine)
+        if checkpoint.position.quantity != 0 or checkpoint.position.realized_pnl != 0:
+            candidate_paper.broker.positions[self.instrument_id] = (
+                checkpoint.position.to_position()
+            )
+
+        self.replay = candidate_replay
+        self.pipeline = candidate_pipeline
+        self.paper = candidate_paper
         self.trades = list(checkpoint.trades)
         self.equity_curve = list(checkpoint.equity_curve)
         self.rejected_decisions = checkpoint.rejected_decisions
@@ -541,6 +582,147 @@ class BacktestSession:
                 drawdown_pct=drawdown_pct,
             )
         )
+
+
+def _validate_checkpoint_internal_state(checkpoint: BacktestCheckpoint) -> None:
+    if checkpoint.total_fees != sum((trade.fee for trade in checkpoint.trades), Decimal("0")):
+        raise ValueError("backtest checkpoint total_fees does not match trades")
+    if len(checkpoint.trades) + checkpoint.rejected_decisions > checkpoint.replay.cursor:
+        raise ValueError("backtest checkpoint executions exceed processed events")
+
+    rebuilt_position = Position()
+    realized_after = Decimal("0")
+    trade_event_ids: set[str] = set()
+    for trade in checkpoint.trades:
+        if trade.event_id in trade_event_ids:
+            raise ValueError("backtest checkpoint contains duplicate trade event_id")
+        trade_event_ids.add(trade.event_id)
+        realized_after += trade.realized_pnl_delta
+        if trade.realized_pnl_after != realized_after:
+            raise ValueError("backtest checkpoint realized P&L chain is inconsistent")
+        direction = (
+            SignalDirection.LONG
+            if trade.action is DecisionAction.LONG
+            else SignalDirection.SHORT
+        )
+        rebuilt_position.apply_fill(
+            direction=direction,
+            quantity=trade.quantity,
+            price=trade.fill_price,
+        )
+        if rebuilt_position.realized_pnl != trade.realized_pnl_after:
+            raise ValueError("backtest checkpoint trade P&L does not match fills")
+
+    expected_position = PositionSnapshot.from_position(rebuilt_position)
+    if checkpoint.position != expected_position:
+        raise ValueError("backtest checkpoint position does not match trades")
+
+    equity_event_ids: set[str] = set()
+    last_peak: Decimal | None = None
+    for point in checkpoint.equity_curve:
+        if point.event_id in equity_event_ids:
+            raise ValueError("backtest checkpoint contains duplicate equity event_id")
+        equity_event_ids.add(point.event_id)
+        implied_peak = point.equity + point.drawdown
+        if implied_peak <= 0:
+            raise ValueError("backtest checkpoint equity implies non-positive peak")
+        if point.drawdown_pct != point.drawdown / implied_peak:
+            raise ValueError("backtest checkpoint drawdown percentage is inconsistent")
+        if last_peak is not None and implied_peak < last_peak:
+            raise ValueError("backtest checkpoint peak equity moves backwards")
+        last_peak = implied_peak
+
+    if last_peak is not None and checkpoint.peak_equity != last_peak:
+        raise ValueError("backtest checkpoint peak_equity is inconsistent")
+    if not trade_event_ids.issubset(equity_event_ids):
+        raise ValueError("backtest checkpoint trade references unprocessed event")
+
+
+def _validate_checkpoint_against_session(
+    *,
+    checkpoint: BacktestCheckpoint,
+    events: tuple[RecordedMarketEvent, ...],
+    instrument_id: uuid.UUID,
+    backtester: EventDrivenBacktester,
+) -> None:
+    prefix = events[: checkpoint.replay.cursor]
+    for event, point in zip(prefix, checkpoint.equity_curve, strict=True):
+        if point.event_id != event.event_id or point.mark_price != event.price:
+            raise ValueError("backtest checkpoint equity curve does not match replay prefix")
+
+    event_indexes = {event.event_id: index for index, event in enumerate(prefix)}
+    previous_trade_index = -1
+    for trade in checkpoint.trades:
+        event_index = event_indexes.get(trade.event_id)
+        if event_index is None or event_index <= previous_trade_index:
+            raise ValueError("backtest checkpoint trade ordering does not match replay prefix")
+        previous_trade_index = event_index
+        if trade.quantity != backtester.requested_quantity:
+            raise ValueError("backtest checkpoint trade quantity does not match configuration")
+        if trade.fee != backtester.assumptions.fee_per_filled_order:
+            raise ValueError("backtest checkpoint trade fee does not match configuration")
+        slippage_fraction = backtester.assumptions.slippage_bps / BASIS_POINTS
+        multiplier = (
+            Decimal("1") + slippage_fraction
+            if trade.action is DecisionAction.LONG
+            else Decimal("1") - slippage_fraction
+        )
+        if trade.fill_price != trade.reference_price * multiplier:
+            raise ValueError("backtest checkpoint fill price does not match assumptions")
+
+    builder = CandleBuilder(instrument_id, interval=backtester.interval)
+    closed_candles: list[Candle] = []
+    for event in prefix:
+        completed = builder.add(event.to_trade())
+        if completed is not None:
+            closed_candles.append(completed)
+    expected_pipeline = ReplayPipelineState(
+        closed_candles=tuple(closed_candles),
+        pending_trades=builder.pending_trades,
+    )
+    if checkpoint.pipeline_state != expected_pipeline:
+        raise ValueError("backtest checkpoint pipeline state does not match replay prefix")
+
+    trades_by_event = {trade.event_id: trade for trade in checkpoint.trades}
+    position = Position()
+    fees = Decimal("0")
+    peak_equity = backtester.starting_equity
+    for event, point in zip(prefix, checkpoint.equity_curve, strict=True):
+        trade = trades_by_event.get(event.event_id)
+        if trade is not None:
+            direction = (
+                SignalDirection.LONG
+                if trade.action is DecisionAction.LONG
+                else SignalDirection.SHORT
+            )
+            position.apply_fill(
+                direction=direction,
+                quantity=trade.quantity,
+                price=trade.fill_price,
+            )
+            fees += trade.fee
+        unrealized = (
+            position.unrealized_pnl(event.price)
+            if position.quantity
+            else Decimal("0")
+        )
+        equity = backtester.starting_equity + position.realized_pnl + unrealized - fees
+        peak_equity = max(peak_equity, equity)
+        drawdown = peak_equity - equity
+        expected_point = EquityPoint(
+            event_id=event.event_id,
+            mark_price=event.price,
+            equity=equity,
+            drawdown=drawdown,
+            drawdown_pct=drawdown / peak_equity,
+        )
+        if point != expected_point:
+            raise ValueError("backtest checkpoint economic state does not match replay prefix")
+
+    if checkpoint.position != PositionSnapshot.from_position(position):
+        raise ValueError("backtest checkpoint final position does not match replay prefix")
+    if checkpoint.total_fees != fees or checkpoint.peak_equity != peak_equity:
+        raise ValueError("backtest checkpoint aggregate economics do not match replay prefix")
 
 
 def _calculate_metrics(
