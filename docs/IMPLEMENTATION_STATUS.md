@@ -20,7 +20,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Master/full blueprint | IMPLEMENTED_UNVERIFIED | `docs/MASTER_BLUEPRINT.md`, `docs/FULL_PROJECT_BLUEPRINT.md` |
 | AI/agent execution rules | IMPLEMENTED_UNVERIFIED | `AGENTS.md` |
 | Implementation/current-phase/next-task tracking | IN_PROGRESS | This file plus `plans/CURRENT_PHASE.md` and `plans/NEXT_TASKS.md` are maintained during coding cycles |
-| CI | TESTED | latest code-bearing cumulative `main` run `36712796063` completed successfully for commit `17e878e8159168cfa273b21149ebea5693d9d13b` |
+| CI | TESTED | latest code-bearing cumulative `main` run `36713535487` completed successfully for commit `9f37b86b7d9442630588e1d08b843e6266f1b50a` |
 
 ## Foundation and infrastructure
 
@@ -102,7 +102,8 @@ This file is the source of truth for implementation status. Generated code alone
 | Multi-fold EMA validation-grid search | TESTED | same grid, `SelectionSpec` and objective reused across ordered folds; per-fold validation boundary rejects test evidence; deterministic multi-fold search identity |
 | Grid-search-bound selected + warm OOS | TESTED | exact grid/search evidence is bound to selected candidate, train preparation and OOS result; mismatched selection fold/unselected candidate rejected |
 | EMA grid selected/warm OOS reporting | TESTED | ordered contiguous fold summaries preserve grid/search/decision/candidate/preparation/result IDs and arithmetic mean fold return; no trade/P&L merge or cross-fold compounding |
-| Walk-forward optimization / Monte Carlo | IN_PROGRESS | EMA grid validation/search and traceable OOS reporting are tested; generic optimization, Monte Carlo and distributed orchestration remain pending |
+| Moving-block bootstrap | TESTED | explicit block length/path count/seed; regular contiguous `PeriodicReturn` source required; blocks sampled with replacement using runtime-stable SHA-256 counter sampling; within-block order and source length preserved; source/spec/result identities deterministic |
+| Walk-forward optimization / Monte Carlo | IN_PROGRESS | EMA grid validation/search and traceable OOS reporting plus one explicit moving-block bootstrap method are tested; generic optimization, broader diagnostics and distributed orchestration remain pending |
 | Generic fitted/model-state execution | NOT_STARTED | current warm path transfers replay closed-candle history for stateless strategy evaluation; no generic mutable strategy/model/feature fitted-state export/import exists |
 
 ## Trading, persistence and safety
@@ -137,7 +138,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for code commit `17e878e8159168cfa273b21149ebea5693d9d13b` in GitHub Actions run `36712796063`.
+A green cumulative `main` CI run completed for code commit `9f37b86b7d9442630588e1d08b843e6266f1b50a` in GitHub Actions run `36713535487`.
 
 That workflow passed:
 
@@ -157,7 +158,9 @@ Newly validated in this coding cycle:
 - validation-only grid search that verifies generated backtester strategy identity against each declared grid candidate;
 - multi-fold grid search that reuses one declared grid/selection specification/objective across ordered walk-forward folds and rejects test-window contamination through the existing validation boundary;
 - grid/search provenance carried into selected+warm OOS so the test result remains traceable to exact pre-test search evidence;
-- grid-selected warm OOS reporting that preserves per-fold search, selection, candidate and preparation identities while deliberately avoiding synthetic cross-fold trade/P&L aggregation or return compounding.
+- grid-selected warm OOS reporting that preserves per-fold search, selection, candidate and preparation identities while deliberately avoiding synthetic cross-fold trade/P&L aggregation or return compounding;
+- deterministic moving-block bootstrap over explicit regular simple-return observations, with stable source/spec/result identities and runtime-stable SHA-256 counter sampling;
+- strict bootstrap validation for source contiguity/period, impossible returns, invalid specs and oversized blocks; sampled paths keep source length and preserve within-block order.
 
 Previously validated replay/backtest restartability, data/provider contracts, paper execution, persistent controls, risk gates and failure-hardening behavior remain green in the cumulative run.
 
@@ -173,10 +176,14 @@ Previously validated replay/backtest restartability, data/provider contracts, pa
 - Pending/incomplete training candles are intentionally not transferred into test execution.
 - The parameter-grid implementation is deliberately EMA-crossover-specific. It is not represented as a generic optimizer framework.
 - `EmaCrossoverParameterGrid.from_axes` materializes the complete Cartesian product and rejects any invalid `fast >= slow` pair rather than silently dropping declared combinations.
-- Multi-fold grid search currently receives explicit validation-event inputs per fold. Automatic dataset partition/slicing orchestration is not implemented.
+- Multi-fold grid search currently receives explicit validation-event inputs per fold. Automatic dataset partition/slicing orchestration is not implemented because completeness cannot be inferred safely without an external manifest/equivalent contract.
 - Candidate ranking uses validation results only. Test-fold results never participate in candidate selection or tuning.
 - Different folds may select different strategy/configuration identities; the EMA grid OOS report therefore preserves those identities per fold rather than pretending there is one common selected strategy.
 - Grid OOS reporting is fold-level evidence. It does not sum trades/P&L or compound returns across folds, because test windows may overlap when walk-forward step is shorter than test length.
+- Moving-block bootstrap currently operates on an already validated regular contiguous `PeriodicReturn` series, not raw trades, OOS folds or arbitrary irregular returns.
+- Blocks are sampled with replacement and preserve dependence only within each sampled block; dependence across sampled block boundaries is deliberately not preserved.
+- SHA-256 counter sampling is used for stable deterministic resampling, not cryptographic security or calibrated randomness. Bootstrap path frequencies are not presented as market probabilities or forecasts.
+- Bootstrap cumulative returns compound the sampled simple returns inside each path; this is a resampling diagnostic, not a profitability or forecast claim.
 - Sharpe/Sortino conventions are repository-specific documented choices, not uniquely correct definitions for every research setting.
 - Walk-forward construction is rolling fixed-length; expanding-window or purged-cross-validation semantics are not claimed.
 - Migration `0007` downgrade intentionally does not delete operator-modified persisted operational state; owning table removal occurs at migration `0005`.
@@ -186,9 +193,9 @@ Previously validated replay/backtest restartability, data/provider contracts, pa
 
 ## Highest-priority work
 
-1. Add automatic fold dataset slicing/orchestration only if it preserves explicit half-open boundaries and fails closed on missing, duplicate or out-of-window evidence rather than silently filtering leakage.
+1. Add automatic fold dataset slicing/orchestration only if a completeness manifest or equivalent contract can preserve explicit half-open boundaries and fail closed on missing/extra evidence rather than silently filtering leakage.
 2. Define generic fitted/model/feature-state export/import only when a concrete stateful research component requires it; do not misrepresent closed-candle warm-up as arbitrary fitted-state restoration.
-3. Define Monte Carlo semantics before implementation: sampling unit, replacement policy, deterministic seed, path count and preserved temporal/dependency relationships.
+3. Add Monte Carlo summary/diagnostic outputs only with explicit statistical definitions and without interpreting resampled path frequencies as calibrated probabilities or forecasts.
 4. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains untested.
 5. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
 6. Validate a real Dhan compact-master transfer in a compatible environment and authenticated provider smoke tests only with securely supplied runtime credentials.
