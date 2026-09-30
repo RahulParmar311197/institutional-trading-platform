@@ -1,11 +1,11 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from trading_platform.research_periods import WalkForwardFold
-from trading_platform.research_results import OOSBacktestResult
+from trading_platform.research_results import OOSBacktestResult, OOSProvenance
 
 WALK_FORWARD_REPORT_VERSION = 1
 
@@ -49,6 +49,12 @@ class WalkForwardReport:
     mean_fold_total_return: Decimal
     version: int = WALK_FORWARD_REPORT_VERSION
 
+    def __post_init__(self) -> None:
+        if self.version != WALK_FORWARD_REPORT_VERSION:
+            raise ValueError("unsupported walk-forward report version")
+        if not self.folds:
+            raise ValueError("walk-forward report requires at least one fold summary")
+
     @property
     def report_id(self) -> str:
         payload = {
@@ -66,8 +72,8 @@ class WalkForwardReport:
                     "index": fold.index,
                     "fold_id": fold.fold_id,
                     "result_id": fold.result_id,
-                    "test_start": fold.test_start.isoformat(),
-                    "test_end": fold.test_end.isoformat(),
+                    "test_start": _datetime_identity(fold.test_start),
+                    "test_end": _datetime_identity(fold.test_end),
                     "total_return": _decimal_identity(fold.total_return),
                     "max_drawdown_pct": _decimal_identity(fold.max_drawdown_pct),
                     "trade_count": fold.trade_count,
@@ -139,9 +145,10 @@ def build_walk_forward_report(
     )
 
 
-def _require_compatible(reference: object, candidate: object) -> None:
-    reference_provenance = reference
-    candidate_provenance = candidate
+def _require_compatible(
+    reference: OOSProvenance,
+    candidate: OOSProvenance,
+) -> None:
     fields = (
         "boundary_id",
         "fold_spec_id",
@@ -153,8 +160,12 @@ def _require_compatible(reference: object, candidate: object) -> None:
         "version",
     )
     for field in fields:
-        if getattr(reference_provenance, field) != getattr(candidate_provenance, field):
+        if getattr(reference, field) != getattr(candidate, field):
             raise ValueError(f"incompatible OOS fold provenance: {field}")
+
+
+def _datetime_identity(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat()
 
 
 def _decimal_identity(value: Decimal) -> str:
