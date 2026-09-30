@@ -9,6 +9,8 @@ from urllib.parse import quote
 
 import httpx
 
+_SAFE_RETRY_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
+
 
 @dataclass(frozen=True, slots=True)
 class HistoricalBar:
@@ -36,6 +38,8 @@ class HistoricalBar:
             raise ValueError("volume must be non-negative")
         if self.open_interest is not None and self.open_interest < 0:
             raise ValueError("open interest must be non-negative")
+        if not self.source.strip():
+            raise ValueError("historical bar source must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +58,8 @@ class HistoricalRetryPolicy:
             raise ValueError("base_delay_seconds must be non-negative")
         if self.max_delay_seconds < self.base_delay_seconds:
             raise ValueError("max_delay_seconds must be >= base_delay_seconds")
-        if any(status < 400 or status > 599 for status in self.retry_status_codes):
-            raise ValueError("retry_status_codes must contain HTTP error statuses")
+        if not self.retry_status_codes.issubset(_SAFE_RETRY_STATUS_CODES):
+            raise ValueError("retry_status_codes must contain transient HTTP statuses only")
 
     def delay_for_retry(self, retry_number: int) -> float:
         if retry_number <= 0:
