@@ -5,11 +5,11 @@ Tasks are ordered by engineering risk. Do not skip validation to work on optiona
 ## P0 — Keep main green and harden failure behavior
 
 1. Keep Ruff, strict MyPy, Pytest, Bandit, migration round-trip, Docker build and runtime import smoke green on every `main` change.
-2. Extend checkpoint/resume into orchestration-level persistence only where long replay/backtest jobs require durable continuation.
+2. Add checkpoint/recovery fault injection for schema-valid but internally inconsistent backtest state, interrupted writes and restore boundaries.
 3. Add more persistence/network/provider fault injection around recovery and control-state transitions.
 4. Keep `docs/IMPLEMENTATION_STATUS.md` synchronized with actual cumulative CI evidence.
 
-Already validated: audit rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, transient provider retries, duplicate-provider-bar rejection, persistent controls/health escalation, replay checkpoint integrity, Dhan master conflict safety, bounded master retrieval and transactional refresh.
+Already validated: audit rollback, duplicate-fill rollback, database-unavailable fail-closed behavior, transient provider retries, duplicate-provider-bar rejection, persistent controls/health escalation, stream-bound replay checkpoint integrity, atomic replay checkpoint files, full-state backtest checkpoint/resume, Dhan master conflict safety, bounded master retrieval and transactional refresh.
 
 ## P1 — Safe external historical/provider evidence
 
@@ -26,24 +26,25 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, and versioned JSON replay checkpoint/resume bound to normalized event content.
+Already validated: event-driven backtester, explicit fees/slippage, risk rejection, no-look-ahead regression, event-time equity curve/core metrics, atomic replay checkpoint storage, and full-state deterministic backtest checkpoint/resume. A fresh backtester restored after an executed simulated fill produces the exact uninterrupted result; changed stream/configuration fails closed.
 
 Next:
 
-1. Define period semantics before Sharpe/Sortino or annualization.
-2. Add explicit dataset boundaries before walk-forward/OOS tooling.
-3. Add durable checkpoint storage/job orchestration only if long-running workflows require cross-process restart.
-4. Add walk-forward/OOS only after leakage protections remain green.
+1. Harden checkpoint internal-consistency validation and fault injection before any distributed job orchestration.
+2. Define period semantics before Sharpe/Sortino or annualization.
+3. Add explicit dataset boundaries before walk-forward/OOS tooling.
+4. Add a scheduler/distributed research job layer only when an actual workflow requires it; do not infer distributed exactly-once semantics from local checkpointing.
+5. Add walk-forward/OOS only after leakage protections remain green.
 
 ## P3 — Deterministic SMC / strategy evolution
 
-Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle, displacement-confirmed MSS, and parameter-specific EMA crossover `v1` strategy identity.
+Already validated: BOS/CHoCH, ATR-ratio regime, FVG lifecycle, displacement-confirmed MSS, parameter-specific EMA crossover `v1` identity, and an immutable strategy registry with ACTIVE/RETIRED lifecycle plus historical retired-version resolution.
 
 Next:
 
-1. Add selected liquidity concepts only where objective event-time rules can be regression-tested.
-2. Add broader feature-output versioning and strategy registry/lifecycle semantics before scanner work.
-3. Add indicators only with trusted reference/regression tests.
+1. Add broader versioned feature-output contracts so derived research features can be reproduced independently of strategy registry state.
+2. Add selected liquidity concepts only where objective event-time rules can be regression-tested.
+3. Add additional strategies/indicators only with trusted reference/regression tests and immutable version identity.
 4. Keep strategy logic shared across replay/backtest/paper paths.
 
 ## P4 — Trading safety before any real order path
@@ -59,6 +60,7 @@ Next:
 ## Later
 
 - walk-forward/OOS/Monte Carlo
+- distributed research orchestration when justified by workload
 - options engine
 - portfolio construction/optimization expansion
 - frontend workspaces
