@@ -30,6 +30,26 @@ async def test_upstox_unsuccessful_payload_is_rejected() -> None:
             )
 
 
+async def test_upstox_duplicate_candle_timestamps_are_rejected() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        candle = ["2025-01-01T09:15:00+05:30", 100, 102, 99, 101, 10, 1]
+        return httpx.Response(
+            200,
+            json={"status": "success", "data": {"candles": [candle, candle]}},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = UpstoxHistoricalClient(access_token="token", http_client=http)
+        with pytest.raises(ValueError, match="duplicate candle timestamps"):
+            await client.fetch(
+                instrument_key="NSE_EQ|INE848E01016",
+                unit=UpstoxHistoricalUnit.DAYS,
+                interval=1,
+                from_date=date(2025, 1, 1),
+                to_date=date(2025, 1, 2),
+            )
+
+
 async def test_dhan_inconsistent_parallel_arrays_are_rejected() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -47,6 +67,32 @@ async def test_dhan_inconsistent_parallel_arrays_are_rejected() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         client = DhanHistoricalClient(access_token="token", http_client=http)
         with pytest.raises(ValueError, match="inconsistent lengths"):
+            await client.fetch_daily(
+                security_id="1333",
+                exchange_segment="NSE_EQ",
+                instrument="EQUITY",
+                from_date=date(2025, 1, 1),
+                to_date=date(2025, 1, 3),
+            )
+
+
+async def test_dhan_duplicate_candle_timestamps_are_rejected() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "open": [100, 101],
+                "high": [102, 103],
+                "low": [99, 100],
+                "close": [101, 102],
+                "volume": [10, 20],
+                "timestamp": [1735689600, 1735689600],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = DhanHistoricalClient(access_token="token", http_client=http)
+        with pytest.raises(ValueError, match="duplicate candle timestamps"):
             await client.fetch_daily(
                 security_id="1333",
                 exchange_segment="NSE_EQ",
