@@ -5,7 +5,12 @@ from decimal import Decimal
 import pytest
 
 from trading_platform.candles import Candle
-from trading_platform.strategy import EmaCrossoverStrategy
+from trading_platform.strategy import (
+    EMA_CROSSOVER_STRATEGY_VERSION,
+    EmaCrossoverStrategy,
+    StrategyLifecycle,
+    StrategyRegistry,
+)
 
 
 def candle(index: int, *, closed: bool = True) -> Candle:
@@ -35,6 +40,88 @@ def test_strategy_identity_is_versioned_and_parameter_specific() -> None:
     assert first.strategy_id == "ema_crossover_v1_2_3"
     assert second.strategy_id == "ema_crossover_v1_2_4"
     assert first.strategy_id != second.strategy_id
+
+
+def test_strategy_registry_resolves_immutable_active_version() -> None:
+    registry = StrategyRegistry()
+    descriptor = registry.register(
+        lambda: EmaCrossoverStrategy(fast_period=2, slow_period=3),
+        family="ema_crossover",
+        version=EMA_CROSSOVER_STRATEGY_VERSION,
+    )
+
+    first = registry.create(descriptor.strategy_id)
+    second = registry.create(descriptor.strategy_id)
+
+    assert descriptor.strategy_id == "ema_crossover_v1_2_3"
+    assert descriptor.family == "ema_crossover"
+    assert descriptor.version == 1
+    assert descriptor.minimum_history == 4
+    assert descriptor.lifecycle is StrategyLifecycle.ACTIVE
+    assert first is not second
+    assert first.strategy_id == second.strategy_id == descriptor.strategy_id
+    assert registry.descriptors == (descriptor,)
+
+
+def test_strategy_registry_retirement_preserves_historical_resolution() -> None:
+    registry = StrategyRegistry()
+    descriptor = registry.register(
+        lambda: EmaCrossoverStrategy(fast_period=2, slow_period=3),
+        family="ema_crossover",
+        version=1,
+    )
+
+    retired = registry.retire(descriptor.strategy_id)
+
+    assert retired.lifecycle is StrategyLifecycle.RETIRED
+    assert registry.retire(descriptor.strategy_id) == retired
+    with pytest.raises(ValueError, match="retired"):
+        registry.create(descriptor.strategy_id)
+    historical = registry.create(descriptor.strategy_id, allow_retired=True)
+    assert historical.strategy_id == descriptor.strategy_id
+
+
+def test_strategy_registry_rejects_duplicate_or_mutating_factory() -> None:
+    registry = StrategyRegistry()
+    calls = 0
+
+    def changing_factory() -> EmaCrossoverStrategy:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return EmaCrossoverStrategy(fast_period=2, slow_period=3)
+        return EmaCrossoverStrategy(fast_period=2, slow_period=4)
+
+    descriptor = registry.register(
+        changing_factory,
+        family="ema_crossover",
+        version=1,
+    )
+    with pytest.raises(RuntimeError, match="different strategy identity"):
+        registry.create(descriptor.strategy_id)
+
+    with pytest.raises(ValueError, match="already registered"):
+        registry.register(
+            lambda: EmaCrossoverStrategy(fast_period=2, slow_period=3),
+            family="ema_crossover",
+            version=1,
+        )
+
+
+def test_strategy_registry_rejects_invalid_registration_metadata() -> None:
+    registry = StrategyRegistry()
+    with pytest.raises(ValueError, match="family"):
+        registry.register(
+            lambda: EmaCrossoverStrategy(fast_period=2, slow_period=3),
+            family="   ",
+            version=1,
+        )
+    with pytest.raises(ValueError, match="version"):
+        registry.register(
+            lambda: EmaCrossoverStrategy(fast_period=2, slow_period=3),
+            family="ema_crossover",
+            version=0,
+        )
 
 
 def test_strategy_rejects_open_candle() -> None:
