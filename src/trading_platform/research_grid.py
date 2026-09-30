@@ -13,6 +13,11 @@ from trading_platform.research_selection import (
     split_fold_for_selection,
 )
 from trading_platform.research_validation import ValidationObjective
+from trading_platform.research_warm_state import PreparedWarmState
+from trading_platform.walk_forward import (
+    SelectedWarmOOSBacktestResult,
+    evaluate_selected_warm_strategy_oos_fold,
+)
 
 EMA_PARAMETER_GRID_VERSION = 1
 
@@ -169,6 +174,34 @@ class EmaWalkForwardGridSearchResult:
         return f"ema_walk_forward_grid_search_v1_{hashlib.sha256(encoded).hexdigest()}"
 
 
+@dataclass(frozen=True, slots=True)
+class EmaGridSelectedWarmOOSResult:
+    grid_id: str
+    search_id: str
+    selected_warm: SelectedWarmOOSBacktestResult
+
+    def __post_init__(self) -> None:
+        if not self.grid_id.strip():
+            raise ValueError("grid_id must not be empty")
+        if not self.search_id.strip():
+            raise ValueError("search_id must not be empty")
+
+    @property
+    def result_id(self) -> str:
+        payload = {
+            "grid_id": self.grid_id,
+            "search_id": self.search_id,
+            "selected_warm_oos_result_id": self.selected_warm.result_id,
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+        return f"ema_grid_selected_warm_oos_v1_{hashlib.sha256(encoded).hexdigest()}"
+
+
 def run_ema_validation_grid_search(
     grid: EmaCrossoverParameterGrid,
     backtester_factory: Callable[[EmaCrossoverParameters], EventDrivenBacktester],
@@ -239,4 +272,34 @@ def run_ema_walk_forward_grid_search(
         selection_spec_id=selection_spec.spec_id,
         objective=objective,
         folds=tuple(results),
+    )
+
+
+def evaluate_ema_grid_selected_warm_oos_fold(
+    grid_search: EmaGridSearchResult,
+    backtester: EventDrivenBacktester,
+    events: list[RecordedMarketEvent],
+    *,
+    boundary_id: str,
+    fold: WalkForwardFold,
+    selection_fold: SelectionFold,
+    prepared_state: PreparedWarmState,
+    feature_ids: tuple[str, ...] = (),
+) -> EmaGridSelectedWarmOOSResult:
+    if grid_search.search.selection_fold_id != selection_fold.selection_fold_id:
+        raise ValueError("grid search does not belong to the requested selection fold")
+    selected_warm = evaluate_selected_warm_strategy_oos_fold(
+        backtester,
+        events,
+        boundary_id=boundary_id,
+        fold=fold,
+        selection_fold=selection_fold,
+        decision=grid_search.search.decision,
+        prepared_state=prepared_state,
+        feature_ids=feature_ids,
+    )
+    return EmaGridSelectedWarmOOSResult(
+        grid_id=grid_search.grid_id,
+        search_id=grid_search.search.search_id,
+        selected_warm=selected_warm,
     )
