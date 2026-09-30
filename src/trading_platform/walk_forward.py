@@ -2,7 +2,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from trading_platform.backtest import EventDrivenBacktester
+from trading_platform.backtest import BacktestResult, EventDrivenBacktester
 from trading_platform.recorded_events import RecordedMarketEvent, normalize_recorded_events
 from trading_platform.replay import ReplayStream
 from trading_platform.research_periods import WalkForwardFold
@@ -202,16 +202,12 @@ def _build_oos_result(
     backtester: EventDrivenBacktester,
     normalized: tuple[RecordedMarketEvent, ...],
     *,
-    result: object,
+    result: BacktestResult,
     boundary_id: str,
     fold: WalkForwardFold,
     strategy_id: str,
     feature_ids: tuple[str, ...],
 ) -> OOSBacktestResult:
-    from trading_platform.backtest import BacktestResult
-
-    if not isinstance(result, BacktestResult):
-        raise TypeError("result must be a BacktestResult")
     stream_digest = ReplayStream(events=normalized).stream_digest
     provenance = OOSProvenance.from_fold(
         boundary_id=boundary_id,
