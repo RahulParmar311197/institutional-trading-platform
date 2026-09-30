@@ -24,7 +24,10 @@ Research restartability and reproducibility now include:
 - explicit Sharpe/Sortino conventions with mandatory `periods_per_year`;
 - fixed-strategy cold-start OOS fold evaluation that rejects any train/out-of-window event rather than silently filtering it;
 - immutable fold-level aggregate reporting with compatibility/order validation and UTC-canonical report identity; overlapping folds are never compounded into a synthetic portfolio path;
-- explicit warm-up/fitted-state provenance binding fold, source window, normalized source stream, strategy/features and serialized state digest without yet applying that state;
+- explicit warm-up/fitted-state provenance binding fold, source window, normalized source stream, strategy/features and serialized state digest;
+- bounded versioned closed-candle warm-state serialization/restoration bound to strategy, instrument and interval;
+- deliberate exclusion of an incomplete source-window candle from warm-state transfer so the first test event cannot close a pre-test candle and emit a contaminated OOS decision;
+- warm OOS execution that restores only compatible closed pre-test history and binds the preparation-state identity to the OOS result;
 - deterministic fit/embargo/validation splits wholly inside the parent training window;
 - validation-only backtest result/provenance envelopes and objective-bound scores;
 - deterministic candidate selection with fold/objective/direction binding and stable tie-breaking;
@@ -46,6 +49,7 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - provider-master conflicts, redirects, oversized responses and malformed data fail closed
 - replay/backtest malformed, mismatched and internally inconsistent checkpoints fail closed
 - research partitions/returns/folds enforce explicit time and leakage boundaries
+- warm OOS imports closed pre-test history only; incomplete train candles are never carried across the boundary
 - validation evidence is restricted to the validation window; selected OOS runs require the exact selected candidate identity
 - runtime container import smoke after production-only dependency install
 
@@ -61,7 +65,8 @@ Persistent control recovery has an explicit initialization contract. Migration `
 - fixed-strategy cold-start OOS evaluation
 - explicit Sharpe/Sortino calculations
 - fold-level walk-forward aggregate reports without cross-fold path compounding
-- warm-up/fitted-state provenance without state application
+- warm-up/fitted-state provenance
+- closed-candle warm-state serialization/restoration and warm OOS execution
 - leakage-safe fit/validation splitting and real validation-backtest evidence
 - objective-bound deterministic validation selection and selection-bound OOS execution
 
@@ -71,11 +76,12 @@ Continue failure hardening only where a distinct fail-closed invariant is missin
 
 Immediate work:
 
-1. Define a typed strategy/feature state export-import boundary before applying warm-up/fitted state during validation or OOS execution; state provenance is tested, but state restoration/application is not implemented.
-2. Add parameter-grid/search orchestration only on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
-3. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
-4. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
-5. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
+1. Define a leakage-safe combined selected+warm OOS contract before parameter search so validation candidate identity, preparation-state identity and test execution are bound in one immutable result path.
+2. Define generic fitted/model/feature-state export-import only when a stateful research component actually requires it; the current tested warm path is specifically closed-candle history for stateless strategy evaluation.
+3. Add parameter-grid/search orchestration only on top of the tested fit/validation selection boundary; test-fold results must never select or tune their own configuration.
+4. Continue persistence/network/provider fault injection only where a distinct fail-closed invariant remains untested; avoid duplicate synthetic cases now that control missing/corrupt/unavailable paths are covered.
+5. Extend versioned feature outputs only when the next feature has an explicit event-time/reproducibility boundary.
+6. Validate an actual Dhan compact-master transfer only in an environment that can consume the octet-stream response; add credentialed historical smoke tests only with securely supplied runtime credentials.
 
 ### Engineering gates
 
@@ -85,7 +91,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 
 - unrestricted live order placement or any real broker order submission
 - broker credentials in source control
-- warm-state application before a typed state import/export contract exists
+- representing closed-candle warm-up as arbitrary fitted/model-state restoration
 - test-fold-driven parameter selection or optimizer ranking
 - distributed orchestration without a concrete workload
 - ML-controlled execution
