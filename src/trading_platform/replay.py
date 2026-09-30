@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -119,10 +120,8 @@ class ReplayCheckpointFileStore:
             os.replace(temporary_name, self.path)
             _fsync_directory(parent)
         except BaseException:
-            try:
+            with suppress(FileNotFoundError):
                 os.unlink(temporary_name)
-            except FileNotFoundError:
-                pass
             raise
 
     def clear(self) -> bool:
