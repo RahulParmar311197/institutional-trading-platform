@@ -37,7 +37,6 @@ def source_event(event_id: str, minute: int, price: str):
         exchange_timestamp=timestamp,
         provider_timestamp=timestamp,
         ingestion_timestamp=timestamp,
-        sequence=minute,
     )
 
 
