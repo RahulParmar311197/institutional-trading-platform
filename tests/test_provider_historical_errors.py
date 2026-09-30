@@ -124,3 +124,17 @@ def test_historical_bar_rejects_open_or_close_outside_range() -> None:
             open_interest=None,
             source="fixture",
         )
+
+
+def test_historical_bar_requires_nonempty_source() -> None:
+    with pytest.raises(ValueError, match="source must not be empty"):
+        HistoricalBar(
+            timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            open=Decimal("100"),
+            high=Decimal("102"),
+            low=Decimal("99"),
+            close=Decimal("101"),
+            volume=1,
+            open_interest=None,
+            source=" ",
+        )
