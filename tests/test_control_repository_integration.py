@@ -73,6 +73,16 @@ async def test_missing_operational_state_fails_closed_after_migration_initializa
                 await repository.load()
             with pytest.raises(RuntimeError, match="operational state is missing"):
                 await repository.persist_mode(OperationalMode.NORMAL)
+            with pytest.raises(RuntimeError, match="operational state is missing"):
+                await repository.persist_lock(
+                    RiskLock(
+                        scope=KillSwitchScope.GLOBAL,
+                        key=None,
+                        reason="must not persist after state loss",
+                    )
+                )
+            with pytest.raises(RuntimeError, match="operational state is missing"):
+                await repository.clear_lock(KillSwitchScope.GLOBAL)
 
             await session.rollback()
     finally:
