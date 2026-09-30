@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -206,7 +207,7 @@ def score_validation_result(
     )
 
 
-def _identity(prefix: str, payload: dict[str, object]) -> str:
+def _identity(prefix: str, payload: Mapping[str, object]) -> str:
     encoded = json.dumps(
         payload,
         sort_keys=True,
