@@ -56,7 +56,7 @@ def test_dataset_boundaries_reject_overlap_across_partitions() -> None:
         )
 
 
-def test_boundary_identity_is_versioned_and_timezone_representation_specific() -> None:
+def test_boundary_identity_is_versioned_and_canonical_across_timezones() -> None:
     utc_boundaries = ResearchDatasetBoundaries(train=window(0, 10), test=window(10, 20))
     plus_one = timezone(timedelta(hours=1))
     shifted_representation = ResearchDatasetBoundaries(
@@ -71,7 +71,7 @@ def test_boundary_identity_is_versioned_and_timezone_representation_specific() -
     )
 
     assert utc_boundaries.boundary_id.startswith("research_boundaries_v1_")
-    assert utc_boundaries.boundary_id != shifted_representation.boundary_id
+    assert utc_boundaries.boundary_id == shifted_representation.boundary_id
 
 
 def test_research_windows_require_timezone_aware_valid_ranges() -> None:
