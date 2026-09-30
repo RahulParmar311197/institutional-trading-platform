@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36700960171` completed successfully |
+| CI | TESTED | cumulative `main` run `36701420395` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -85,7 +85,9 @@ This file is the source of truth for implementation status. Generated code alone
 | Backtest restore atomicity | TESTED | restore validates candidate replay/pipeline/economic state before swapping session state; failed restore leaves an existing session unchanged |
 | Backtest checkpoint file persistence | TESTED | bounded UTF-8 JSON state uses secure temporary file creation, fsync and atomic replace; injected replace failure preserves the last good file and cleans temporary state |
 | Backtest core analytics | TESTED | event-time equity curve, total return, max drawdown, trade counts, realized wins/losses, gross P/L and profit factor |
-| Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase |
+| Research dataset boundaries | TESTED | versioned timezone-aware half-open train/validation/test windows reject overlap/naive timestamps, allow explicit gaps and use a UTC-canonical deterministic boundary identity |
+| Return-period/annualization semantics | NOT_STARTED | frequency semantics must be explicit before Sharpe/Sortino or annualized metrics |
+| Walk-forward/OOS/Monte Carlo | NOT_STARTED | later phase; build only on explicit boundary/period contracts and leakage protections |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
 | Durable order/fill persistence | TESTED | decision linkage, deduplication, persistence and recovery |
 | Paper broker | TESTED | deterministic market fill and position updates |
@@ -111,7 +113,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `ff191c37d3a871997ae00f45c7d2844664c65ed8` in GitHub Actions run `36700960171`.
+A green cumulative `main` CI run completed for commit `5a5ae63af8ea3081c583379d4075b7e18fdddfeb` in GitHub Actions run `36701420395`.
 
 The run passed in one workflow:
 
@@ -133,6 +135,7 @@ Validated additions in the current cumulative scope include:
 - fault-injected `os.replace` failure demonstrating preservation of the last good checkpoint file and cleanup of temporary state
 - versioned parameter-specific regime feature identity with canonical Decimal parameter representation
 - regime outputs carrying canonical instrument and event-time `as_of` provenance from the last closed candle
+- versioned research dataset boundary contracts with explicit half-open train/validation/test semantics, overlap rejection, explicit gaps and UTC-canonical identity across equivalent timezone representations
 - previously validated full-state checkpoint/resume, immutable strategy registry, provider classification/master ingestion, deterministic replay, historical normalization and trading-safety capabilities remain green in the cumulative run
 
 ## Important validation boundaries
@@ -146,6 +149,7 @@ Validated additions in the current cumulative scope include:
 - Backtest integrity checks reconstruct deterministic local simulator state from persisted trades/replay prefix; they are not a cryptographic authenticity mechanism and do not imply exactly-once guarantees for arbitrary external side effects.
 - Interrupted-write coverage is deliberate fault injection around atomic replace, not a claim of exhaustive power-loss/filesystem-crash validation.
 - Versioned regime output is the first concrete derived-feature contract; no generic feature registry or universal schema is claimed.
+- Research boundaries define partition membership only; no walk-forward fold generator, OOS optimizer, Sharpe/Sortino or annualization semantics are claimed.
 - No real broker order endpoint is implemented or called.
 - CI validates repository/container behavior, not a deployed environment.
 - Backtest results are deterministic research outputs, not profitability claims.
@@ -154,10 +158,10 @@ Validated additions in the current cumulative scope include:
 ## Highest-priority work
 
 1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first define initialization-versus-corruption semantics where missing persisted state is currently valid first-run behavior.
-2. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
-3. Define explicit dataset/period semantics before walk-forward/OOS or annualized metrics.
-4. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
-5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are securely supplied at runtime; never commit secrets.
+2. Define explicit return-period/frequency semantics before Sharpe/Sortino or annualized metrics; do not infer frequency from irregular event timestamps.
+3. Add walk-forward/OOS fold generation only on top of the tested dataset-boundary contract and explicit leakage protections.
+4. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
+5. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
 6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
 
 ## Blockers
