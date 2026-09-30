@@ -12,6 +12,12 @@ Recorded events / local JSONL / provider historical bars → normalization → c
 
 The same strategy/decision/risk contracts power replay-driven paper execution and the event-driven backtester.
 
+A canonical Upstox historical slice is also validated:
+
+Canonical instrument → full-range dated Upstox identifier resolution → read-only historical client → validated provider bars.
+
+A request that crosses an instrument-identifier rollover is rejected before HTTP rather than silently using one stale ID.
+
 ### Safety controls already validated
 
 - live trading disabled by default
@@ -28,9 +34,10 @@ The same strategy/decision/risk contracts power replay-driven paper execution an
 ### Quant/research foundation already validated
 
 - canonical instrument master/provider identifiers
-- dated provider-ID resolver with missing/overlap failure behavior
+- point-in-time and full-range provider-ID resolution with missing/overlap/rollover failure behavior
 - recorded event JSONL ingestion and historical-source abstraction
 - read-only Upstox/Dhan historical HTTP contract clients using mocked transports
+- canonical Upstox historical service using PostgreSQL identifier resolution plus mocked HTTP
 - bounded transient-only read retries; auth/client failures are not retried
 - provider OHLC/provenance validation and OHLC→closed-candle normalization
 - quote-quality validation
@@ -42,11 +49,11 @@ The same strategy/decision/risk contracts power replay-driven paper execution an
 
 ### Current objective
 
-Connect the read-only historical boundary to canonical instrument identifiers without creating hidden mapping or rollover assumptions, while continuing failure hardening.
+Complete the read-only historical boundary without guessing provider classification, while continuing failure hardening and research reproducibility.
 
 Immediate work:
 
-1. Add a historical-service layer that requires one valid provider identifier to cover the complete requested range or explicitly rejects/splits the range.
+1. Define a safe canonical Dhan historical service only after the required exchange-segment/instrument classification can be derived from explicit canonical metadata; do not guess provider enums.
 2. Add resume/interruption semantics where historical/replay work needs deterministic continuation rather than implicit restart.
 3. Add secure optional authenticated read-only provider smoke validation only when credentials are explicitly supplied; never commit credentials.
 4. Add feature/strategy output versioning before scanner work.
