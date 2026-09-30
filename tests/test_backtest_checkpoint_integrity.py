@@ -6,12 +6,11 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from test_backtest import make_backtester, sample_events
 
 from trading_platform.backtest import BacktestCheckpoint, BacktestCheckpointFileStore
 from trading_platform.pipeline import ReplayPipelineState
 from trading_platform.recorded_events import normalize_recorded_events
-
-from test_backtest import make_backtester, sample_events
 
 
 def test_checkpoint_rejects_internally_inconsistent_fees() -> None:
@@ -83,7 +82,7 @@ def test_interrupted_checkpoint_replace_preserves_last_good_file(
     second = make_backtester().create_session(events)
     second.step(4)
 
-    def fail_replace(source: str | bytes | os.PathLike[str] | os.PathLike[bytes], destination: str | bytes | os.PathLike[str] | os.PathLike[bytes]) -> None:
+    def fail_replace(*_args: object) -> None:
         raise OSError("simulated replace failure")
 
     monkeypatch.setattr(os, "replace", fail_replace)
