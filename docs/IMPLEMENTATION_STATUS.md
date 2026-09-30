@@ -34,7 +34,7 @@ This file is the source of truth for implementation status. Generated code alone
 | Structured logging/request correlation | TESTED | request-ID generation/preservation covered |
 | Health/readiness | TESTED | liveness and fail-closed database/Redis readiness covered |
 | Docker runtime | TESTED | image builds after runtime-only install and imports app/provider modules |
-| CI | TESTED | cumulative `main` run `36708465433` completed successfully |
+| CI | TESTED | cumulative `main` run `36710026023` completed successfully |
 | Instrument master | TESTED | canonical instrument/provider identifier schema and migration validation |
 | Provider identifier classification metadata | TESTED | migration 0006 adds nullable provider exchange-segment/instrument-type/expiry-code fields without breaking existing identifiers |
 | Provider identifier resolver | TESTED | point-in-time/full-range references resolve external ID plus provider metadata; missing, overlapping and rollover-crossing mappings fail closed |
@@ -90,14 +90,16 @@ This file is the source of truth for implementation status. Generated code alone
 | Walk-forward fold construction | TESTED | deterministic rolling train/test windows use explicit lengths, step and optional embargo; folds are half-open, have UTC-canonical deterministic fold IDs, and no truncated final fold is emitted |
 | OOS evaluation/provenance | TESTED | versioned provenance/result envelopes bind boundary, fold/spec, strategy, ordered feature IDs, normalized stream digest, backtest config digest, execution costs and full deterministic backtest result identity |
 | Fixed-strategy OOS fold evaluation | TESTED | cold-start evaluator accepts only events inside the half-open test window, rejects train/out-of-window leakage instead of filtering it, runs a fixed strategy/configuration and emits deterministic OOS provenance/result envelopes |
-| Research warm-up/fitted-state provenance | TESTED | versioned state provenance binds boundary/fold/spec, strategy/features, exact train or trailing warm-up source window, normalized source-stream digest and serialized-state digest; test-window leakage is rejected; state is not yet applied to execution |
+| Research warm-up/fitted-state provenance | TESTED | versioned state provenance binds boundary/fold/spec, strategy/features, exact train or trailing warm-up source window, normalized source-stream digest and serialized-state digest; test-window leakage is rejected |
+| Closed-candle warm-state transfer | TESTED | versioned bounded serialization binds strategy, instrument, interval and closed-candle history; malformed/tampered payloads and incompatible/freshness violations fail closed; incomplete source-window candles are deliberately excluded from transfer |
+| Warm-state OOS evaluation | TESTED | test-only OOS execution can restore compatible closed-candle warm-up history only when boundary/fold/spec/strategy/features/instrument/interval match and every transferred candle ends before the test window; result identity binds the preparation-state ID to the OOS result |
 | Validation split/selection contract | TESTED | deterministic fit/optional-embargo/validation split stays wholly inside the parent train window and preserves the test window; candidate evidence is bound to fold, objective and direction with deterministic tie-breaking |
 | Validation backtest evidence | TESTED | validation evaluator accepts only validation-window events, binds strategy/features/backtest configuration and normalized stream to a deterministic result identity, and derives objective scores from the real backtest result |
 | Selection-bound OOS evaluation | TESTED | selected OOS execution requires the exact parent fold/selection fold/decision and candidate identity chosen from validation evidence before evaluating test-window events; result identity binds the selection decision to the OOS result |
 | Sharpe/Sortino/annualized metrics | TESTED | requires explicit `periods_per_year`; Sharpe uses arithmetic mean excess return over sample standard deviation; Sortino uses arithmetic mean above target over population lower-partial-moment downside deviation; zero denominator returns `None` |
 | Walk-forward aggregate reporting | TESTED | ordered contiguous fold results require compatible boundary/spec/strategy/features/config/execution assumptions; report identity is UTC-canonical and immutable; summaries remain fold-level and use arithmetic mean fold return without summing/compounding potentially overlapping folds |
 | Walk-forward optimization/Monte Carlo | NOT_STARTED | parameter search/orchestration and Monte Carlo remain pending; build only on explicit provenance and leakage protections |
-| Warm-state execution | NOT_STARTED | no typed strategy/feature state export-import or state-application boundary exists; provenance alone does not enable warm-start/fitted execution |
+| Generic fitted/model-state execution | NOT_STARTED | the tested warm-state path transfers replay-pipeline closed-candle history for stateless strategy evaluation; no generic mutable strategy/model/feature fitted-state export-import or restoration contract exists |
 | OMS | TESTED | state transitions, fill caps, duplicate-fill idempotency and recovered state |
 | Durable order/fill persistence | TESTED | decision linkage, deduplication, persistence and recovery |
 | Paper broker | TESTED | deterministic market fill and position updates |
@@ -123,7 +125,7 @@ This file is the source of truth for implementation status. Generated code alone
 
 ## Validation evidence
 
-A green cumulative `main` CI run completed for commit `88a2a10d4149a5ad80fab129f0aa16f135e1a4d0` in GitHub Actions run `36708465433`.
+A green cumulative `main` CI run completed for commit `9b0e45efe5a508f8786fa620d85a7f4cb64d3dae` in GitHub Actions run `36710026023`.
 
 The run passed in one workflow:
 
@@ -146,7 +148,9 @@ Validated additions in the current cumulative scope include:
 - explicit sample-standard-deviation Sharpe and population lower-partial-moment Sortino with mandatory explicit annualization metadata
 - fixed-strategy cold-start OOS fold evaluation that rejects accidental train/out-of-window event leakage and produces deterministic provenance/result IDs
 - fold-level immutable walk-forward reports with compatibility/order checks and UTC-canonical report identity; overlapping test windows are not compounded or summed into a synthetic portfolio path
-- explicit warm-up/fitted-state provenance with source-window, normalized-stream and serialized-state digests while keeping state application disabled
+- explicit warm-up/fitted-state provenance with source-window, normalized-stream and serialized-state digests
+- deterministic bounded closed-candle warm-state serialization/restore with strategy/instrument/interval binding and deliberate exclusion of an incomplete source-window candle
+- warm OOS execution that imports only closed pre-test candle history, rejects provenance/configuration/window mismatches and binds the preparation-state identity to the OOS result
 - fit/embargo/validation splitting inside the parent train window, validation-only backtest evidence, objective-bound candidate scores and deterministic selection
 - selected OOS evaluation that rejects a backtester/configuration whose candidate identity was not selected from the exact validation fold
 - migration-backed persistent control initialization plus fail-closed missing state, invalid mode/scope, malformed lock-key and database-unavailable load/mutation coverage
@@ -163,9 +167,10 @@ Validated additions in the current cumulative scope include:
 - Backtest integrity checks reconstruct deterministic local simulator state from persisted trades/replay prefix; they are not a cryptographic authenticity mechanism and do not imply exactly-once guarantees for arbitrary external side effects.
 - Interrupted-write coverage is deliberate fault injection around atomic replace, not a claim of exhaustive power-loss/filesystem-crash validation.
 - Versioned regime output is the first concrete derived-feature contract; no generic feature registry or universal schema is claimed.
-- Warm-up/fitted-state provenance does not export, restore or apply strategy/feature state. Warm-start execution remains unimplemented.
+- The tested warm-state path transfers replay-pipeline closed-candle history only. It does not serialize mutable strategy internals, fitted model parameters, feature-engine internal state, optimizer state or arbitrary external state.
+- Pending/incomplete training candles are intentionally not transferred across the train→test boundary, preventing the first test event from closing a pre-test candle and emitting a contaminated OOS decision.
 - Validation selection currently operates on explicitly supplied candidate backtest configurations and two repository-defined objectives; no automatic parameter grid/search engine or statistical significance claim is implemented.
-- Selected OOS evaluation remains cold-start with respect to strategy internal state; it binds the pre-test selection decision but does not import fitted state.
+- Selection-bound OOS evaluation remains separate from warm-state OOS execution; a combined selected+warm path is not yet implemented and must preserve both provenance contracts when added.
 - Walk-forward aggregate reports are fold-level summaries. Because generated folds may have overlapping test windows when `step < test_length`, the report deliberately does not sum trades/P&L or compound fold returns into a single path.
 - Sharpe/Sortino use the explicitly documented repository conventions only; no claim is made that those conventions are uniquely correct for every research use case.
 - Walk-forward folds are rolling fixed-length construction; expanding-window or purged-cross-validation semantics are not claimed.
@@ -177,12 +182,13 @@ Validated additions in the current cumulative scope include:
 
 ## Highest-priority work
 
-1. Define a typed strategy/feature state export-import boundary before applying warm-up/fitted state during validation or OOS execution; provenance is tested, but state application is not implemented.
-2. Add parameter-grid/search orchestration only on top of the tested fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
-3. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains untested; avoid redundant synthetic cases now that persisted-control missing/corrupt/unavailable paths are covered.
-4. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
-5. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
-6. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
+1. Define a generic fitted/model/feature-state export-import contract only when a stateful research component requires it; do not misrepresent closed-candle warm-up as arbitrary fitted-state restoration.
+2. Define a leakage-safe combined selected+warm OOS boundary, including how preparation-state identity participates in validation candidate identity, before adding parameter-grid/search orchestration.
+3. Add parameter-grid/search orchestration only on top of the tested fit/validation selection contract; test-fold outcomes must never select or tune their own candidate.
+4. Continue persistence/network/provider failure injection only where a distinct fail-closed invariant remains untested; avoid redundant synthetic cases now that persisted-control missing/corrupt/unavailable paths are covered.
+5. Extend versioned feature-output contracts to the next derived feature only when its reproducibility/event-time boundary is explicit.
+6. Validate a real Dhan compact-master transfer in an environment that supports the octet-stream endpoint, then record retrieval metadata/freshness without auto-linking instruments.
+7. Keep all broker order submission out of scope until every live gate is integrated, validated and explicitly approved.
 
 ## Blockers
 
