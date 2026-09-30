@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 import httpx
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from trading_platform.instruments import InstrumentIdentifier
 
@@ -115,6 +115,22 @@ class DhanCompactMasterFetcher:
 
     async def fetch_records(self) -> tuple[DhanInstrumentMasterRecord, ...]:
         return parse_dhan_compact_instrument_master(await self.fetch_text())
+
+
+class DhanInstrumentMasterRefreshService:
+    def __init__(
+        self,
+        *,
+        sessions: async_sessionmaker[AsyncSession],
+        fetcher: DhanCompactMasterFetcher,
+    ) -> None:
+        self._sessions = sessions
+        self._fetcher = fetcher
+
+    async def refresh(self) -> DhanInstrumentMasterSyncResult:
+        records = await self._fetcher.fetch_records()
+        async with self._sessions.begin() as session:
+            return await DhanInstrumentMasterSynchronizer(session).synchronize(records)
 
 
 def parse_dhan_compact_instrument_master(
