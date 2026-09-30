@@ -24,16 +24,17 @@ Next:
 
 ## P2 — Research robustness
 
-Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, and combined selected+warm OOS execution. Pending source-window candles are deliberately excluded from warm transfer; combined execution validates the selected candidate before applying train-derived warm state.
+Already validated: event-driven backtesting, explicit fees/slippage/risk rejection/no-look-ahead behavior, full-state checkpoint/recovery, versioned dataset boundaries, explicit regular return periods, deterministic rolling walk-forward folds with optional embargo and deterministic fold IDs, versioned OOS provenance/result identities, explicit Sharpe/Sortino conventions, fixed-strategy cold-start test-fold evaluation, fold-level aggregate reporting, explicit warm-up/fitted-state provenance, bounded closed-candle warm-state serialization/restoration, warm OOS execution, fit/embargo/validation splitting, validation-only backtest evidence with objective-bound scores, deterministic candidate selection, selection-bound OOS evaluation, combined selected+warm OOS execution, and deterministic explicit-candidate validation search. Pending source-window candles are excluded from warm transfer; validation search accepts validation-window evidence only and produces stable candidate-set/search identities.
 
 Next:
 
-1. Add deterministic parameter-grid/search orchestration that emits validation results, objective-bound scores and a selection decision without observing the test fold.
-2. Bind every search run to an explicit candidate set/grid identity, objective, selection fold and deterministic ordering/tie behavior; do not permit silent candidate mutation.
-3. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
-4. Extend selected/warm OOS aggregate reporting only if it preserves each fold's decision/preparation identities and does not synthesize a path across overlapping test folds.
-5. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
-6. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
+1. Add an explicit deterministic parameter-grid specification/generator that materializes immutable candidate configurations before validation begins.
+2. Add multi-fold search orchestration that runs the same declared candidate grid through each fold's fit/validation boundary without using any test-fold outcome for ranking.
+3. Preserve candidate-set/grid/search identities through selected+warm OOS reporting so research results can be traced back to the exact pre-test search evidence.
+4. Define generic fitted/model/feature-state export-import only when a stateful component requires it; the current tested state path is closed-candle history for stateless strategy evaluation, not arbitrary fitted-state restoration.
+5. Extend selected/warm OOS aggregate reporting only if it preserves each fold's decision/preparation identities and does not synthesize a path across overlapping test folds.
+6. Add Monte Carlo only after sampling unit, replacement policy, path count/seed and preserved dependencies are explicit.
+7. Add distributed research orchestration only when an actual workload requires it; local checkpointing does not imply distributed exactly-once semantics.
 
 ## P3 — Deterministic SMC / strategy evolution
 
