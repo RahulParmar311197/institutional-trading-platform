@@ -13,15 +13,16 @@ Already validated in this area: audit-transaction rollback, duplicate-fill rollb
 
 ## P1 — Safe external historical service
 
-Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, point/range provider-ID resolution, canonical Upstox historical service, and canonical Dhan daily NSE/BSE cash service. Identifier rollovers are rejected before HTTP.
+Already validated: local JSONL historical source, provider OHLC model/normalization, mock-contract Upstox/Dhan read-only clients, transient-only retry policy, point/range provider reference resolution, canonical Upstox historical service, canonical Dhan daily NSE/BSE cash service, and canonical Dhan daily derivative routing using explicit persisted provider exchange-segment/instrument-type/expiry-code metadata. Identifier rollovers and classification mismatches are rejected before HTTP.
 
 Next:
 
-1. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
-2. Define explicit canonical/provider metadata for Dhan derivative instrument classification before supporting futures/options; never infer ambiguous provider enums.
-3. Consider canonical Dhan intraday orchestration only after provider-local datetime/session semantics and desired request splitting are explicit.
-4. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
-5. Do not treat mocked HTTP contract/service tests as real provider validation.
+1. Add provider instrument-master ingestion that maps verified Dhan detailed instrument-list fields into provider identifier metadata.
+2. Make provider-master ingestion conflict-safe: do not silently overwrite overlapping IDs/classifications or canonical contracts.
+3. Add optional authenticated read-only smoke tests only when credentials/entitlements are securely supplied at runtime.
+4. Consider canonical Dhan intraday orchestration only after provider-local datetime/session semantics and desired request splitting are explicit.
+5. Keep provider raw bars distinct from normalized closed candles and preserve provenance.
+6. Do not treat mocked HTTP contract/service tests as real provider validation.
 
 ## P2 — Research robustness
 
