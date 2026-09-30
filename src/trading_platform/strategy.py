@@ -7,6 +7,8 @@ from typing import Protocol
 from trading_platform.candles import Candle
 from trading_platform.indicators import ema
 
+EMA_CROSSOVER_STRATEGY_VERSION = 1
+
 
 class SignalDirection(StrEnum):
     LONG = "LONG"
@@ -36,7 +38,10 @@ class EmaCrossoverStrategy:
             raise ValueError("require 0 < fast_period < slow_period")
         self.fast_period = fast_period
         self.slow_period = slow_period
-        self.strategy_id = f"ema_crossover_{fast_period}_{slow_period}"
+        self.strategy_id = (
+            f"ema_crossover_v{EMA_CROSSOVER_STRATEGY_VERSION}_"
+            f"{fast_period}_{slow_period}"
+        )
 
     @property
     def minimum_history(self) -> int:
