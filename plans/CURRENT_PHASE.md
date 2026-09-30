@@ -14,24 +14,18 @@ Canonical read-only historical slices remain validated for Upstox and Dhan cash/
 
 The Dhan compact instrument-master boundary is validated in CI with mocked HTTP plus real PostgreSQL: exact official URL → bounded streaming retrieval → strict CSV parsing → conflict-safe synchronization → transactional commit. Synchronization enriches only pre-existing Dhan security-ID links.
 
-Research restartability now has two validated layers:
+Research restartability has two validated layers: replay cursor/stream identity can be persisted locally using bounded atomic fsynced files, and backtests checkpoint the full deterministic economic/pipeline state. Schema-valid checkpoints are cross-checked against replay-prefix, trade/P&L/position/fee/drawdown invariants; failed restore is atomic; injected replace failure preserves the last committed checkpoint.
 
-- replay cursor/stream identity can be persisted locally using bounded, atomic, fsynced checkpoint files;
-- backtests can checkpoint the full deterministic state: replay cursor, closed/open candle state, simulated position/P&L, trades, equity curve, fees/drawdown and rejection count.
+Strategy identity is explicit and immutable through the registry lifecycle. The regime engine is the first concrete derived feature with a parameter-specific versioned identity plus instrument/event-time provenance.
 
-A backtest interrupted after a simulated fill, serialized to disk, restored into a fresh backtester and completed produces exactly the same `BacktestResult` as an uninterrupted run. Checkpoints are bound to normalized stream content and the strategy/risk/execution configuration.
+Research reproducibility now has explicit temporal, provenance and metric contracts:
 
-Checkpoint recovery is hardened beyond schema validation: trade/P&L/position/fee/drawdown chains are checked for internal consistency, pipeline/equity state must match the processed replay prefix, failed restores do not partially mutate an existing session, and an injected atomic-replace failure preserves the last good checkpoint file while cleaning the temporary file.
-
-Strategy identity is explicit in the evaluator contract. The registry provides immutable ID registration, ACTIVE/RETIRED lifecycle, fresh factory resolution and explicit historical resolution of retired versions; factories are revalidated against identity and history semantics.
-
-The regime engine is the first derived research feature with an explicit versioned output contract. Its feature identity is parameter-specific and Decimal-canonical, and outputs carry canonical instrument plus closed-candle `as_of` event-time provenance.
-
-Research reproducibility now also has explicit temporal contracts:
-
-- train/validation/test windows are timezone-aware, half-open, ordered/non-overlapping, allow deliberate gaps, and use a UTC-canonical versioned identity;
-- periodic returns require an explicitly declared interval and reject irregular sampling instead of inferring frequency; annualization is optional metadata and is never guessed;
-- deterministic rolling walk-forward folds use explicit train length, test length, step and optional embargo, and never emit a truncated final fold.
+- train/validation/test windows are timezone-aware, half-open and non-overlapping with UTC-canonical deterministic identity;
+- periodic returns require an explicitly declared regular interval; annualization is never inferred;
+- deterministic rolling walk-forward folds use explicit train/test lengths, step and optional embargo, emit only full folds and carry deterministic UTC-canonical fold IDs;
+- OOS provenance binds the exact boundary, fold/spec, strategy ID, ordered feature IDs, normalized stream digest, backtest configuration digest and execution assumptions;
+- OOS result identity covers the complete deterministic backtest result plus provenance;
+- Sharpe uses arithmetic mean excess return over sample standard deviation; Sortino uses arithmetic mean above target over population lower-partial-moment downside deviation; both require explicit `periods_per_year` and return `None` on a zero denominator.
 
 ### Safety controls already validated
 
@@ -49,7 +43,7 @@ Research reproducibility now also has explicit temporal contracts:
 - failed backtest restore leaves the existing in-memory session unchanged
 - interrupted local checkpoint replacement preserves the previously committed checkpoint
 - research dataset partitions reject overlap and naive timestamps
-- return calculations reject irregular/non-monotonic observations
+- return calculations and risk-adjusted metrics reject irregular/noncontiguous periods
 - walk-forward folds keep training before test data and support explicit embargo separation
 - runtime container import smoke after production-only dependency install
 
@@ -69,21 +63,22 @@ Research reproducibility now also has explicit temporal contracts:
 - versioned parameter-specific regime feature outputs with event-time provenance
 - versioned train/validation/test research boundaries with UTC-canonical identity
 - explicit regular return-period semantics without implicit annualization
-- deterministic rolling walk-forward fold construction with optional embargo
+- deterministic rolling walk-forward fold construction with optional embargo and deterministic fold identity
+- versioned OOS provenance/result identity binding data, strategy, feature and execution assumptions
+- explicitly defined Sharpe/Sortino conventions with mandatory annualization metadata
 - event-driven backtester with fees/slippage, risk rejection, no-look-ahead regression, equity curve and core metrics
 
 ### Current objective
 
-Deepen failure hardening and reproducible research contracts while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
+Deepen failure hardening and move from reproducibility primitives into leakage-safe walk-forward evaluation while preserving canonical mapping and trading-safety boundaries. Validate real provider evidence only where the environment and credentials actually permit it.
 
 Immediate work:
 
 1. Add more persistence/network/provider fault injection around recovery and control-state transitions, but first make first-run initialization versus persisted-state corruption semantics explicit where absence is currently valid.
-2. Define OOS evaluation/result provenance contracts before strategy selection or optimization; bind results to strategy identity, feature identity, fold/boundary identity and execution assumptions.
-3. Add Sharpe/Sortino or annualized metrics only after exact sample/population conventions are explicit and `periods_per_year` is required rather than inferred.
-4. Extend versioned feature-output contracts to the next derived feature only when its event-time/reproducibility boundary is explicit.
-5. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
-6. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
+2. Add walk-forward strategy evaluation that consumes the tested fold and OOS provenance contracts without parameter selection or optimizer shortcuts.
+3. Extend versioned feature-output contracts to the next derived feature only when its event-time/reproducibility boundary is explicit.
+4. Validate an actual Dhan compact-master transfer in an environment that supports the provider's octet-stream response; record freshness/evidence without auto-linking instruments.
+5. Add optional authenticated historical-provider smoke validation only when credentials/entitlements are explicitly and securely supplied; never commit credentials.
 
 ### Engineering gates
 
@@ -95,6 +90,7 @@ Every addition must keep `main` green across Ruff, strict MyPy, PostgreSQL migra
 - any real broker order submission
 - broker credentials in source control
 - distributed research orchestration before a real workload justifies it
+- optimizer-driven parameter selection before leakage-safe evaluation contracts exist
 - ML-controlled execution
 - profitability claims
 - Kubernetes/microservice expansion
