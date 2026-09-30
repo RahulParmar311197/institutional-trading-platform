@@ -58,7 +58,6 @@ def priced_shifted_event(event_id: str, minute: int, price: str):
         exchange_timestamp=timestamp,
         provider_timestamp=timestamp,
         ingestion_timestamp=timestamp,
-        sequence=minute,
     )
 
 
@@ -184,7 +183,7 @@ def test_warm_oos_uses_only_closed_training_history() -> None:
     assert cold.result.metrics.trade_count == 0
     assert warm.oos.result.metrics.trade_count == 1
     assert warm.oos.result.trades[0].reference_price == test_events[0].price
-    assert all(candle.close != test_events[0].price or candle.end <= current_fold.train.end for candle in prepared.state.closed_candles)
+    assert all(candle.end <= current_fold.train.end for candle in prepared.state.closed_candles)
     assert prepared.state.closed_candles[-1].close == priced_shifted_event("expected", -3, "99").price
     assert warm.preparation_state_id == prepared.preparation_state_id
     assert warm.result_id.startswith("warm_oos_v1_")
