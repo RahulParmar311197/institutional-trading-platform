@@ -93,6 +93,24 @@ def test_replay_checkpoint_resumes_exactly_after_consumed_events() -> None:
     assert tuple(item.event_id for item in resumed_tail) == ("3",)
 
 
+def test_replay_checkpoint_json_round_trip_preserves_resume_state() -> None:
+    events = [
+        event("1", seconds=0, sequence=1),
+        event("2", seconds=1, sequence=2),
+        event("3", seconds=2, sequence=3),
+    ]
+    original = ReplayStream.from_events(events)
+    original.step(1)
+
+    serialized = original.checkpoint().to_json()
+    restored_checkpoint = ReplayCheckpoint.from_json(serialized)
+    resumed = ReplayStream.from_events(events)
+    resumed.restore(restored_checkpoint)
+
+    assert resumed.cursor == 1
+    assert tuple(item.event_id for item in resumed.step(10)) == ("2", "3")
+
+
 def test_replay_checkpoint_rejects_changed_stream_even_with_same_length() -> None:
     original = ReplayStream.from_events(
         [
@@ -139,6 +157,20 @@ def test_replay_checkpoint_validates_serialized_state() -> None:
         ReplayCheckpoint(cursor=0, event_count=0, stream_digest="not-a-digest")
     with pytest.raises(ValueError, match="unsupported"):
         ReplayCheckpoint(cursor=0, event_count=0, stream_digest=digest, version=2)
+    with pytest.raises(ValueError, match="invalid replay checkpoint JSON"):
+        ReplayCheckpoint.from_json("{")
+    with pytest.raises(ValueError, match="unexpected fields"):
+        ReplayCheckpoint.from_json(
+            '{"cursor":0,"event_count":0,"stream_digest":"'
+            + digest
+            + '","version":1,"extra":true}'
+        )
+    with pytest.raises(ValueError, match="cursor must be an integer"):
+        ReplayCheckpoint.from_json(
+            '{"cursor":true,"event_count":0,"stream_digest":"'
+            + digest
+            + '","version":1}'
+        )
 
 
 def test_recorded_event_requires_timezone_aware_timestamps() -> None:
